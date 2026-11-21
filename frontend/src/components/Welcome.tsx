@@ -10,20 +10,20 @@ import {
 const suggestions = [
   {
     icon: Trees,
-    label: "把周末交给自然",
-    text: "周末想在附近轻松玩半天，少走路，再找一家好吃的店。",
+    label: "周末半日游",
+    text: "周末在附近玩半天，尽量少走路，并安排一顿午餐。",
     tone: "green",
   },
   {
     icon: Coffee,
-    label: "找一段慢下来的时光",
-    text: "想找个安静的地方喝咖啡、看看书，顺便逛逛周边。",
+    label: "咖啡馆和周边散步",
+    text: "找一家安静的咖啡馆，喝咖啡、看书，再逛逛周边。",
     tone: "amber",
   },
   {
     icon: Utensils,
-    label: "从一顿好饭开始",
-    text: "帮我安排下班后的两小时，吃点好的，再去附近散散步。",
+    label: "晚餐和散步",
+    text: "安排下班后的两小时，包括晚餐和附近散步。",
     tone: "blue",
   },
 ];
@@ -36,18 +36,18 @@ export function Welcome({
   return (
     <section className="welcome" aria-label="开始规划">
       <div className="welcome-badge">
-        <Sparkles size={15} /> 日常，也值得认真期待
+        <Sparkles size={15} /> 本地生活规划
       </div>
       <div className="welcome-symbol" aria-hidden="true">
         <Compass size={44} strokeWidth={1.4} />
       </div>
       <h1>
-        把今天，安排得<span>刚刚好。</span>
+        描述你的<span>出行需求</span>
       </h1>
       <p className="welcome-copy">
-        一次说走就走，一顿心心念念。
+        填写出发城市、时间、人数和预算，
         <br />
-        把想法告诉逛搭，一起找找生活的好去处。
+        也可以从下方示例开始。
       </p>
       <div className="suggestion-grid">
         {suggestions.map(({ icon: Icon, label, text, tone }) => (
@@ -65,7 +65,7 @@ export function Welcome({
         ))}
       </div>
       <div className="welcome-caption">
-        <Footprints size={15} /> 远近都好，喜欢最重要
+        <Footprints size={15} /> 点击示例可填入输入框
       </div>
     </section>
   );

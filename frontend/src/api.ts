@@ -84,7 +84,7 @@ export class ApiClient {
       throw new ApiError(
         0,
         "CONNECTION_FAILED",
-        "暂时连接不上服务，请稍后重试。",
+        "无法连接服务，请稍后重试。",
       );
     }
     if (!response.ok) {
@@ -93,7 +93,7 @@ export class ApiClient {
       let message = body?.error?.message || "操作未完成，请稍后重试。";
       if (response.status === 422)
         message = "请检查填写内容；用户名至少 3 位，密码至少 12 位。";
-      if (response.status === 429) message = "操作有些频繁，休息一下再试试。";
+      if (response.status === 429) message = "操作过于频繁，请稍后重试。";
       throw new ApiError(response.status, code, message);
     }
     return response.status === 204

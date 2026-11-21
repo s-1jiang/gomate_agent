@@ -41,6 +41,6 @@ it("preserves server error codes and keeps provider text out of generic network 
   );
   await expect(new ApiClient().me()).rejects.toEqual(expect.any(ApiError));
   await expect(new ApiClient().me()).rejects.toMatchObject({
-    message: "暂时连接不上服务，请稍后重试。",
+    message: "无法连接服务，请稍后重试。",
   });
 });

@@ -464,7 +464,7 @@ export default function App() {
             <strong>
               逛搭 <b>GoMate</b>
             </strong>
-            <small>生活的好去处，一起找</small>
+            <small>本地生活规划助手</small>
           </span>
         </a>
         <button
@@ -472,10 +472,10 @@ export default function App() {
           onClick={() => selectConversation(null)}
           disabled={sending}
         >
-          <Plus size={19} /> 开启新的想法
+          <Plus size={19} /> 新建会话
         </button>
         <div className="sidebar-label">
-          <span>你的会话</span>
+          <span>历史会话</span>
           <span>{conversations.length || ""}</span>
         </div>
         {user && (
@@ -493,16 +493,16 @@ export default function App() {
           {!user ? (
             <div className="sidebar-empty">
               <MessageCircle size={25} strokeWidth={1.3} />
-              <p>留住每一次灵感</p>
-              <span>登录后，在这里找到你的会话。</span>
+              <p>尚未登录</p>
+              <span>登录后可查看历史会话。</span>
             </div>
           ) : filtered.length === 0 && !listing ? (
             <div className="sidebar-empty">
               <MessageCircle size={25} />
-              <p>{query ? "还没找到这个想法" : "从第一个想法开始"}</p>
+              <p>{query ? "未找到匹配的会话" : "暂无会话"}</p>
               <span>
                 {query
-                  ? "换个关键词试试看。"
+                  ? "请尝试其他关键词。"
                   : "发送一条消息，会话就会保存在这里。"}
               </span>
             </div>
@@ -539,7 +539,7 @@ export default function App() {
           )}
           {listing && (
             <div className="list-loading">
-              <LoaderCircle size={17} className="spin" /> 正在整理会话…
+              <LoaderCircle size={17} className="spin" /> 正在加载会话…
             </div>
           )}
           {hasMore && !listing && (
@@ -552,14 +552,6 @@ export default function App() {
           )}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-tip">
-            <span>✦</span>
-            <p>
-              不必远行，
-              <br />
-              也能发现日常的新鲜感。
-            </p>
-          </div>
           <div className="account-row">
             <span className="avatar">
               {user ? (
@@ -569,8 +561,8 @@ export default function App() {
               )}
             </span>
             <div>
-              <strong>{user?.username || "嗨，旅行搭子"}</strong>
-              <small>{user ? "私人空间" : "登录以保存你的想法"}</small>
+              <strong>{user?.username || "未登录"}</strong>
+              <small>{user ? "已登录" : "登录后可保存会话"}</small>
             </div>
             {user ? (
               <button
@@ -604,8 +596,8 @@ export default function App() {
             >
               <Menu size={21} />
             </button>
-            <span className="workspace-label">生活规划室</span>
-            <span className="beta-tag">初见版</span>
+            <span className="workspace-label">生活规划</span>
+            <span className="beta-tag">预览版</span>
           </div>
           <div className="topbar-right">
             <button
@@ -660,14 +652,14 @@ export default function App() {
               {historyLoading ? (
                 <div className="history-loading" role="status">
                   <LoaderCircle className="spin" size={24} />
-                  正在翻开这段会话…
+                  正在加载消息…
                 </div>
               ) : messages.length === 0 ? (
                 <Welcome onSuggestion={suggest} />
               ) : (
                 <div className="message-list">
                   <div className="conversation-intro">
-                    <Compass size={17} /> 一个想法，一段好时光
+                    <Compass size={17} /> 会话记录
                   </div>
                   {messages.map((message) => (
                     <article
@@ -697,7 +689,7 @@ export default function App() {
             <div className="composer-area">
               <form className="composer" onSubmit={send}>
                 <label className="sr-only" htmlFor="message-input">
-                  告诉逛搭你的想法
+                  输入出行需求
                 </label>
                 <textarea
                   ref={composer}
@@ -712,12 +704,12 @@ export default function App() {
                     }))
                   }
                   onKeyDown={composerKey}
-                  placeholder="想去哪儿、和谁去、花多少？从一个想法开始…"
+                  placeholder="请输入出行需求，例如城市、时间、人数和预算。"
                   disabled={sending || checking}
                 />
                 <div className="composer-toolbar">
                   <span>
-                    <Compass size={15} /> 逛搭陪你找灵感
+                    <Compass size={15} /> 出行需求
                   </span>
                   <div>
                     {draft.length > 14000 && (
@@ -737,7 +729,7 @@ export default function App() {
                       <button
                         className="send-button"
                         type="submit"
-                        aria-label={user ? "发送想法" : "登录后发送"}
+                        aria-label={user ? "发送消息" : "登录后发送"}
                         disabled={
                           !draft.trim() || sending || checking || historyLoading
                         }
@@ -753,7 +745,7 @@ export default function App() {
                 </div>
               </form>
               <p className="composer-footnote">
-                {user ? "想法自动保存在当前会话" : "登录后即可保存想法"}
+                {user ? "发送后保存到当前会话" : "登录后可发送和保存消息"}
                 <span>·</span>Enter 发送，Shift + Enter 换行
               </p>
             </div>
@@ -779,9 +771,9 @@ export default function App() {
         />
       )}
       {cityOpen && (
-        <Dialog title="这次，在哪座城市？" onClose={() => setCityOpen(false)}>
+        <Dialog title="选择出发城市" onClose={() => setCityOpen(false)}>
           <p className="muted">
-            选择的城市会随想法一起保存，方便之后继续规划。
+            城市将与出行需求一起保存。
           </p>
           <form
             className="city-form"
@@ -814,14 +806,14 @@ export default function App() {
               ))}
             </div>
             <button className="button primary" type="submit">
-              {cityDraft.trim() ? "就在这里" : "暂不选择城市"}
+              {cityDraft.trim() ? "确认" : "暂不选择"}
             </button>
           </form>
         </Dialog>
       )}
       {deleting && (
         <Dialog
-          title="删除这段会话？"
+          title="删除会话？"
           onClose={() => setDeleting(null)}
           busy={deleteBusy}
         >
@@ -854,22 +846,22 @@ function RunStatus({ run }: { run: Run }) {
   const active = isActiveRun(run);
   const scaffold = run.error_code === "WORKFLOW_NOT_IMPLEMENTED";
   const saved = scaffold || run.status === "succeeded";
-  let title = "本次处理未完成";
-  let text = "你的需求已保存，可以稍后继续补充。";
+  let title = "处理未完成";
+  let text = "需求已保存，可继续补充。";
   if (active) {
-    title = "正在整理你的想法";
-    text = "稍等片刻，你也可以随时取消。";
+    title = "正在处理";
+    text = "处理过程中可以取消任务。";
   } else if (scaffold) {
-    title = "想法已好好收下";
+    title = "需求已保存";
     text =
-      "目前可保存需求和查看历史。完整行程生成功能正在准备中，你可以继续补充时间、预算或喜欢的地方。";
-  } else if (run.status === "cancelled") title = "已停止本次处理";
+      "当前支持保存需求和查看历史会话，暂不支持生成完整行程。你可以继续补充出发时间、预算等信息。";
+  } else if (run.status === "cancelled") title = "任务已取消";
   else if (run.status === "waiting_user") {
-    title = "还需要一点信息";
-    text = "可以继续补充你的出发时间、地点和预算。";
+    title = "请补充信息";
+    text = "请补充出发时间、地点或预算。";
   } else if (run.status === "succeeded") {
-    title = "本次处理已完成";
-    text = "你的消息已保存。";
+    title = "处理完成";
+    text = "消息已保存。";
   }
   return (
     <div

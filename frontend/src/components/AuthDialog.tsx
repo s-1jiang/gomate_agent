@@ -43,7 +43,7 @@ export function AuthDialog({
 
   return (
     <Dialog
-      title={mode === "login" ? "欢迎回到逛搭" : "开始你的逛搭旅程"}
+      title={mode === "login" ? "登录逛搭" : "注册账号"}
       onClose={onClose}
       busy={busy}
     >
@@ -51,7 +51,7 @@ export function AuthDialog({
         <Compass size={24} />
       </div>
       <p className="muted auth-subtitle">
-        登录后，想去的地方和聊过的想法都能好好保存。
+        登录后可保存出行需求，并查看历史会话。
       </p>
       <div className="auth-tabs" role="tablist" aria-label="账户操作">
         {(["login", "register"] as const).map((value) => (
@@ -134,7 +134,7 @@ export function AuthDialog({
         </button>
       </form>
       <p className="auth-footnote">
-        会话只对你可见，退出登录不会删除已经保存的想法。
+        会话仅本人可见。退出登录不会删除历史消息。
       </p>
     </Dialog>
   );

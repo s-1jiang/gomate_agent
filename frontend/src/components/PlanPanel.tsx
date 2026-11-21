@@ -16,7 +16,6 @@ export function PlanPanel({
     >
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">YOUR NEXT LITTLE ADVENTURE</span>
           <h2>行程预览</h2>
         </div>
         <button
@@ -66,14 +65,14 @@ export function PlanPanel({
         <div className="illustration-pin">
           <MapPin size={20} />
         </div>
-        <span className="illustration-label">下一站，值得期待</span>
+        <span className="illustration-label">路线示意</span>
       </div>
       <div className="empty-plan">
-        <h3>好行程，始于一个想法</h3>
+        <h3>暂无行程</h3>
         <p>
-          告诉我你想怎么度过这段时光。
+          地点、路线和时间安排
           <br />
-          地点、路线和安排，将在这里相遇。
+          将在生成行程后显示。
         </p>
       </div>
       <div className="plan-facts">
@@ -81,30 +80,27 @@ export function PlanPanel({
           <span>
             <MapPin size={17} /> 出发城市
           </span>
-          <strong>{city || "由你决定"}</strong>
+          <strong>{city || "未选择"}</strong>
         </div>
         <div>
           <span>
             <Clock3 size={17} /> 时间安排
           </span>
-          <strong>等待你的想法</strong>
+          <strong>未设置</strong>
         </div>
         <div>
           <span>
             <Wallet size={17} /> 出行预算
           </span>
-          <strong>按你的节奏</strong>
+          <strong>未设置</strong>
         </div>
       </div>
       <div className="feature-note">
         <Route size={19} />
         <div>
-          <strong>先把想法留下来</strong>
-          <p>目前可保存需求、查看历史会话。完整行程生成功能正在准备中。</p>
+          <strong>当前功能</strong>
+          <p>支持保存需求和查看历史会话，行程生成功能尚未开放。</p>
         </div>
-      </div>
-      <div className="panel-bottom">
-        <span className="tiny-compass">✦</span> 少一点纠结，多一点出发。
       </div>
     </aside>
   );

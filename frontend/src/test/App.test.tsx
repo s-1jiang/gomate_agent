@@ -121,7 +121,7 @@ describe("GoMate workspace", () => {
     });
     render(<App />);
     expect(
-      await screen.findByRole("dialog", { name: "欢迎回到逛搭" }),
+      await screen.findByRole("dialog", { name: "登录逛搭" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("登录已过期");
     expect(sessionStorage.getItem("gomate.session")).toBeNull();
@@ -179,19 +179,19 @@ describe("GoMate workspace", () => {
     const user = userEvent.setup();
     render(<App />);
     expect(
-      screen.getByRole("heading", { name: "把今天，安排得刚刚好。" }),
+      screen.getByRole("heading", { name: "描述你的出行需求" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /把周末交给自然/ }));
+    await user.click(screen.getByRole("button", { name: /周末半日游/ }));
     expect(
       (
         screen.getByRole("textbox", {
-          name: "告诉逛搭你的想法",
+          name: "输入出行需求",
         }) as HTMLTextAreaElement
       ).value,
     ).toContain("少走路");
     await user.click(screen.getByRole("button", { name: "登录后发送" }));
     expect(
-      screen.getByRole("dialog", { name: "欢迎回到逛搭" }),
+      screen.getByRole("dialog", { name: "登录逛搭" }),
     ).toBeInTheDocument();
     expect(calls.some((call) => call.options?.method === "POST")).toBe(false);
   });
@@ -201,7 +201,7 @@ describe("GoMate workspace", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.type(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
       "周末去逛逛",
     );
     await user.click(screen.getByRole("button", { name: "登录" }));
@@ -216,7 +216,7 @@ describe("GoMate workspace", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
     ).toHaveValue("周末去逛逛");
     expect(sessionStorage.getItem("gomate.session")).toBe("test-token");
     expect(Object.values(sessionStorage)).not.toContain("test-password-123");
@@ -232,21 +232,21 @@ describe("GoMate workspace", () => {
     render(<App />);
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "发送想法" }),
+        screen.getByRole("button", { name: "发送消息" }),
       ).toBeInTheDocument(),
     );
     await user.type(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
       "下班后想去散步",
     );
-    await user.click(screen.getByRole("button", { name: "发送想法" }));
-    expect(await screen.findByText("想法已好好收下")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByText("需求已保存")).toBeInTheDocument();
     expect(screen.getByText("下班后想去散步")).toBeInTheDocument();
     expect(
-      screen.getByText(/完整行程生成功能正在准备中，你可以继续补充/),
+      screen.getByText(/暂不支持生成完整行程。你可以继续补充/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
     ).toHaveValue("");
   });
 
@@ -257,25 +257,25 @@ describe("GoMate workspace", () => {
     render(<App />);
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "发送想法" }),
+        screen.getByRole("button", { name: "发送消息" }),
       ).toBeInTheDocument(),
     );
     await user.type(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
       "想找个地方喝咖啡",
     );
-    await user.click(screen.getByRole("button", { name: "发送想法" }));
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "暂时连接不上服务",
+      "无法连接服务",
     );
     expect(
-      screen.getByRole("textbox", { name: "告诉逛搭你的想法" }),
+      screen.getByRole("textbox", { name: "输入出行需求" }),
     ).toHaveValue("想找个地方喝咖啡");
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "发送想法" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled(),
     );
-    await user.click(screen.getByRole("button", { name: "发送想法" }));
-    await screen.findByText("想法已好好收下");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await screen.findByText("需求已保存");
     expect(sendBodies).toHaveLength(2);
     expect(sendBodies[0].client_message_id).toBe(
       sendBodies[1].client_message_id,
@@ -297,7 +297,7 @@ describe("GoMate workspace", () => {
     await user.click(
       await screen.findByRole("button", { name: "删除会话：周末的想法" }),
     );
-    const dialog = screen.getByRole("dialog", { name: "删除这段会话？" });
+    const dialog = screen.getByRole("dialog", { name: "删除会话？" });
     expect(calls.some((call) => call.options?.method === "DELETE")).toBe(false);
     await user.click(within(dialog).getByRole("button", { name: "保留会话" }));
     expect(calls.some((call) => call.options?.method === "DELETE")).toBe(false);
