@@ -13,7 +13,7 @@ docker compose up -d --build --wait
 - 接口文档：http://127.0.0.1:8080/docs
 - 健康检查：http://127.0.0.1:8080/health/ready
 
-没有 `.env` 或 API Key 也能启动当前基础功能。需要配置时，将 `.env.example` 复制为 `.env` 后在本机填写；不要覆盖已有密钥文件。
+没有 `.env` 或 API Key 也能启动注册、会话和本地知识库功能；文字聊天需要有效的 DeepSeek Key。需要配置时，将 `.env.example` 复制为 `.env` 后在本机填写；不要覆盖已有密钥文件。
 根目录 `.env` 中的 `GOMATE_WEB_PORT` 可修改宿主机端口，默认 8080。
 
 ## 服务与数据
@@ -58,7 +58,7 @@ docker compose up -d --build --wait
 python scripts/smoke_docker.py
 ```
 
-冒烟脚本使用随机测试账号与会话，经前端代理验证注册、登录、消息、幂等、实际 Run 状态和登出。它只输出检查结果，不输出密码或 Token。
+冒烟脚本使用随机测试账号与会话，经前端代理验证注册、登录、知识入库、检索、范围隔离和登出。默认不发送聊天消息，不调用外部模型，不输出密码或 Token。
 
 额外验证容器重启后的数据持久化：
 
@@ -66,6 +66,14 @@ python scripts/smoke_docker.py
 python scripts/smoke_docker.py --check-restart
 ```
 
-该选项会重启当前 Compose 项目的 backend，需在没有其他活跃任务时运行。测试后删除本次创建的会话并撤销登录 Token，随机测试账号会保留为空账号。
+该选项会重启当前 Compose 项目的 backend，需在没有其他活跃任务时运行。测试后删除本次创建的资料和会话并撤销登录 Token，随机测试账号会保留为空账号。
+
+文字聊天完整链路也可在隔离临时数据库和本地模拟供应商下验证，不使用 `.env` 中的真实密钥：
+
+```powershell
+python scripts/smoke_chat.py
+```
+
+代码变更后执行 `docker compose up -d --build --wait`。仅修改 `.env` 时执行 `docker compose up -d --no-deps --force-recreate --wait backend`；普通 restart 不更新容器环境变量。
 
 完整行程生成、真实高德查询和多 Agent 编排尚未接入；Docker 封装不会自动启用这些能力。

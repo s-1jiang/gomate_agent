@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sqlite3
 import time
 from datetime import UTC, datetime
@@ -121,6 +122,8 @@ class ConversationRepository:
         return [dict(row) for row in rows]
 
     def messages(self, session_id: str, limit: int, after: str | None) -> list[dict]:
+        from app.retrieval.repository import visible_sources
+
         with self.database.connect() as connection:
             require_conversation(connection, self.auth, session_id)
             cursor_time, cursor_id = "", ""
@@ -138,7 +141,13 @@ class ConversationRepository:
                 "AND (created_at, id) > (?, ?) ORDER BY created_at, id LIMIT ?",
                 (self.auth.user_id, session_id, cursor_time, cursor_id, limit),
             ).fetchall()
-        return [dict(row) for row in rows]
+            result = []
+            for row in rows:
+                item = dict(row)
+                sources = json.loads(item.pop("sources_json"))
+                item["sources"] = visible_sources(connection, self.auth, session_id, sources)
+                result.append(item)
+        return result
 
     def delete(self, session_id: str) -> None:
         with self.database.connect(write=True) as connection:
@@ -218,24 +227,127 @@ class RunRepository:
             raise not_found()
         return dict(row)
 
-    def finish_scaffold(self, run_id: str) -> None:
-        """No external calls until the business workflow and trusted gateway are wired."""
+    def start(self, run_id: str) -> dict | None:
         with self.database.connect(write=True) as connection:
+            row = connection.execute(
+                "SELECT r.*, l.fencing_token FROM runs r JOIN session_leases l "
+                "ON l.user_id = r.user_id AND l.session_id = r.session_id AND l.run_id = r.id "
+                "WHERE r.user_id = ? AND r.id = ? AND r.status = 'queued' "
+                "AND r.deadline > ? AND l.expires_at > ?",
+                (self.auth.user_id, run_id, time.time(), time.time()),
+            ).fetchone()
+            if row is None:
+                connection.execute(
+                    "UPDATE runs SET status = 'timed_out', error_code = 'RUN_TIMEOUT', "
+                    "updated_at = ? WHERE user_id = ? AND id = ? AND status = 'queued' "
+                    "AND deadline <= ?",
+                    (now_iso(), self.auth.user_id, run_id, time.time()),
+                )
+                return None
             connection.execute(
-                "UPDATE runs SET status = 'failed', error_code = 'WORKFLOW_NOT_IMPLEMENTED', "
-                "error_message = ?, updated_at = ? "
-                "WHERE user_id = ? AND id = ? AND status = 'queued' AND deadline > ? "
-                "AND EXISTS (SELECT 1 FROM session_leases l WHERE l.run_id = runs.id "
-                "AND l.user_id = runs.user_id AND l.session_id = runs.session_id "
-                "AND l.expires_at > ?)",
+                "UPDATE runs SET status = 'running', updated_at = ? WHERE user_id = ? AND id = ?",
+                (now_iso(), self.auth.user_id, run_id),
+            )
+        return dict(row)
+
+    def active(self, run_id: str, fencing_token: int) -> bool:
+        with self.database.connect() as connection:
+            return self._active(connection, run_id, fencing_token) is not None
+
+    def _active(self, connection, run_id: str, fencing_token: int):
+        return connection.execute(
+            "SELECT r.* FROM runs r JOIN session_leases l ON l.user_id = r.user_id "
+            "AND l.session_id = r.session_id AND l.run_id = r.id "
+            "WHERE r.user_id = ? AND r.id = ? AND r.status = 'running' "
+            "AND r.deadline > ? AND l.expires_at > ? AND l.fencing_token = ?",
+            (self.auth.user_id, run_id, time.time(), time.time(), fencing_token),
+        ).fetchone()
+
+    def history(self, run: dict, limit: int) -> list[dict]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT role, content FROM messages WHERE user_id = ? AND session_id = ? "
+                "AND (created_at, id) <= (SELECT created_at, id FROM messages "
+                "WHERE user_id = ? AND session_id = ? AND id = ?) "
+                "ORDER BY created_at DESC, id DESC LIMIT ?",
                 (
-                    "规划工作流尚未接入；消息已保存。",
+                    self.auth.user_id,
+                    run["session_id"],
+                    self.auth.user_id,
+                    run["session_id"],
+                    run["message_id"],
+                    limit,
+                ),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def finish(self, run_id, fencing_token, content, sources, retrieval_status, counts) -> bool:
+        from app.retrieval.repository import visible_sources
+
+        with self.database.connect(write=True) as connection:
+            run = self._active(connection, run_id, fencing_token)
+            if run is None:
+                return False
+            checked = visible_sources(connection, self.auth, run["session_id"], sources)
+            if any(not source["available"] for source in checked):
+                raise AppError("KNOWLEDGE_CHANGED", "检索资料已删除，请重新发送问题", 409)
+            connection.execute(
+                "INSERT INTO messages(id, user_id, session_id, role, content, created_at, "
+                "sources_json, retrieval_status) VALUES (?, ?, ?, 'assistant', ?, ?, ?, ?)",
+                (
+                    str(uuid4()),
+                    self.auth.user_id,
+                    run["session_id"],
+                    content,
+                    now_iso(),
+                    json.dumps(sources, ensure_ascii=False),
+                    retrieval_status,
+                ),
+            )
+            connection.execute(
+                "UPDATE runs SET status = 'succeeded', tool_calls = ?, external_requests = ?, "
+                "llm_calls = ?, updated_at = ? WHERE user_id = ? AND id = ?",
+                (
+                    counts["tool"],
+                    counts["external"],
+                    counts["llm"],
                     now_iso(),
                     self.auth.user_id,
                     run_id,
-                    time.time(),
-                    time.time(),
                 ),
+            )
+            connection.execute(
+                "UPDATE session_leases SET expires_at = 0 WHERE user_id = ? AND run_id = ? "
+                "AND fencing_token = ?",
+                (self.auth.user_id, run_id, fencing_token),
+            )
+        return True
+
+    def fail(self, run_id, fencing_token, error: AppError, counts) -> None:
+        status = "timed_out" if error.code in ("RUN_TIMEOUT", "LLM_TIMEOUT") else "failed"
+        if error.code == "SERVICE_RESTARTED":
+            status = "interrupted"
+        with self.database.connect(write=True) as connection:
+            connection.execute(
+                "UPDATE runs SET status = ?, error_code = ?, error_message = ?, updated_at = ? "
+                "WHERE user_id = ? AND id = ? AND status = 'running' "
+                "AND EXISTS (SELECT 1 FROM session_leases l WHERE l.user_id = runs.user_id "
+                "AND l.run_id = runs.id AND l.fencing_token = ?)",
+                (
+                    status,
+                    error.code,
+                    error.message,
+                    now_iso(),
+                    self.auth.user_id,
+                    run_id,
+                    fencing_token,
+                ),
+            )
+            # Counts also survive explicit cancellation, without overwriting its status.
+            connection.execute(
+                "UPDATE runs SET tool_calls = ?, external_requests = ?, llm_calls = ? "
+                "WHERE user_id = ? AND id = ?",
+                (counts["tool"], counts["external"], counts["llm"], self.auth.user_id, run_id),
             )
             connection.execute(
                 "UPDATE session_leases SET expires_at = 0 WHERE user_id = ? AND run_id = ?",

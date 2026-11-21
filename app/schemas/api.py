@@ -48,12 +48,34 @@ class MessageCreate(InputModel):
     content: str = Field(min_length=1, max_length=16000)
 
 
+class RetrievalSource(BaseModel):
+    label: str
+    cited: bool
+    available: bool = True
+    source_kind: Literal["private_knowledge"] | None = None
+    scope: Literal["user", "session"] | None = None
+    document_id: str | None = None
+    document_version: int | None = None
+    chunk_id: str | None = None
+    title: str | None = None
+    source_ref: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    excerpt: str | None = None
+    content_hash: str | None = None
+    document_hash: str | None = None
+    retrieval_method: Literal["lexical"] | None = None
+    retrieved_at: datetime | None = None
+
+
 class MessageOut(BaseModel):
     id: str
     role: Literal["user", "assistant"]
     content: str
     client_message_id: str | None
     created_at: datetime
+    sources: list[RetrievalSource] = Field(default_factory=list)
+    retrieval_status: Literal["no_matches", "retrieved"] | None = None
 
 
 RunStatus = Literal[

@@ -7,7 +7,7 @@ from app.main import create_app
 
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(_env_file=None, database_path=tmp_path / "gomate.db")
+    return Settings(_env_file=None, database_path=tmp_path / "gomate.db", deepseek_api_key="")
 
 
 @pytest.fixture

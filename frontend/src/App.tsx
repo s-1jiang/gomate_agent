@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   ArrowUp,
+  BookOpen,
   Check,
   ChevronDown,
   Compass,
@@ -38,6 +39,8 @@ import {
 } from "./api";
 import { AuthDialog } from "./components/AuthDialog";
 import { Dialog } from "./components/Dialog";
+import { KnowledgeDialog } from "./components/KnowledgeDialog";
+import { MessageSources } from "./components/MessageSources";
 import { PlanPanel } from "./components/PlanPanel";
 import { Welcome } from "./components/Welcome";
 
@@ -85,6 +88,8 @@ export default function App() {
   const [planOpen, setPlanOpen] = useState(false);
   const [city, setCity] = useState("");
   const [cityOpen, setCityOpen] = useState(false);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [cityDraft, setCityDraft] = useState("");
   const [deleting, setDeleting] = useState<Conversation | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -106,6 +111,7 @@ export default function App() {
   const draft = drafts[draftKey] || "";
 
   const clearSession = useCallback(() => {
+    setKnowledgeOpen(false);
     epoch.current += 1;
     saveToken(null);
     setToken(null);
@@ -218,7 +224,7 @@ export default function App() {
       if (!controller.signal.aborted)
         setMessages((current) => {
           const merged = new Map(
-            [...all, ...current].map((item) => [item.id, item]),
+            [...current, ...all].map((item) => [item.id, item]),
           );
           return [...merged.values()].sort(
             (a, b) =>
@@ -235,7 +241,21 @@ export default function App() {
         if (!controller.signal.aborted) setHistoryLoading(false);
       });
     return () => controller.abort();
-  }, [api, selected, user?.id, handleError]);
+  }, [api, selected, user?.id, handleError, historyVersion]);
+
+  useEffect(() => {
+    if (!currentRun || isActiveRun(currentRun) || currentRun.session_id !== selected) return;
+    const controller = new AbortController();
+    const run = currentRun;
+    api.messages(run.session_id, run.message_id, controller.signal).then((items) => {
+      if (controller.signal.aborted) return;
+      setMessages((previous) => {
+        const merged = new Map([...previous, ...items].map((item) => [item.id, item]));
+        return [...merged.values()].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+      });
+    }).catch((error) => { if (!controller.signal.aborted) handleError(error); });
+    return () => controller.abort();
+  }, [api, currentRun?.id, currentRun?.status, selected, handleError]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -275,6 +295,7 @@ export default function App() {
   }, [api, currentRun?.id, currentRun?.status, handleError]);
 
   function selectConversation(id: string | null) {
+    selectedRef.current = id;
     setSelected(id);
     setSidebarOpen(false);
     setNotice("");
@@ -316,6 +337,7 @@ export default function App() {
     }
     const version = epoch.current;
     const originalKey = draftKey;
+    const originalSelected = selected;
     const content = city ? `城市：${city}\n${draft.trim()}` : draft.trim();
     setSending(true);
     setNotice("");
@@ -328,6 +350,8 @@ export default function App() {
         if (version !== epoch.current) return;
         sessionId = conversation.id;
         setConversations((items) => [conversation, ...items]);
+        if (selectedRef.current !== originalSelected) return;
+        selectedRef.current = sessionId;
         setSelected(sessionId);
         setDrafts((items) => ({ ...items, [sessionId!]: draft }));
       }
@@ -353,12 +377,14 @@ export default function App() {
         client_message_id: null,
         created_at: run.created_at,
       };
-      setMessages((items) =>
-        items.some((item) => item.id === ownMessage.id)
-          ? items
-          : [...items, ownMessage],
-      );
-      setCurrentRun(run);
+      if (selectedRef.current === sessionId) {
+        setMessages((items) =>
+          items.some((item) => item.id === ownMessage.id)
+            ? items
+            : [...items, ownMessage],
+        );
+        setCurrentRun(run);
+      }
     } catch (error) {
       if (version === epoch.current) handleError(error);
     } finally {
@@ -600,6 +626,9 @@ export default function App() {
             <span className="beta-tag">预览版</span>
           </div>
           <div className="topbar-right">
+            <button className="city-button knowledge-button" aria-label="知识库" onClick={() => user ? setKnowledgeOpen(true) : setAuthOpen(true)}>
+              <BookOpen size={16} /> <span>知识库</span>
+            </button>
             <button
               className="city-button"
               disabled={sending}
@@ -678,6 +707,7 @@ export default function App() {
                           {message.role === "user" ? "你" : "逛搭"}
                         </span>
                         <p>{message.content}</p>
+                        <MessageSources message={message} />
                       </div>
                     </article>
                   ))}
@@ -704,7 +734,7 @@ export default function App() {
                     }))
                   }
                   onKeyDown={composerKey}
-                  placeholder="请输入出行需求，例如城市、时间、人数和预算。"
+                   placeholder="输入问题，或描述城市、时间、人数和预算。"
                   disabled={sending || checking}
                 />
                 <div className="composer-toolbar">
@@ -745,7 +775,7 @@ export default function App() {
                 </div>
               </form>
               <p className="composer-footnote">
-                {user ? "发送后保存到当前会话" : "登录后可发送和保存消息"}
+                {user ? "消息及相关知识片段将发送至 DeepSeek" : "登录后可进行文字聊天"}
                 <span>·</span>Enter 发送，Shift + Enter 换行
               </p>
             </div>
@@ -811,6 +841,10 @@ export default function App() {
           </form>
         </Dialog>
       )}
+      {knowledgeOpen && user && (
+        <KnowledgeDialog key={`${user.id}:${selected}`} api={api} sessionId={selected}
+          onClose={() => setKnowledgeOpen(false)} onChanged={() => setHistoryVersion((value) => value + 1)} onError={handleError} />
+      )}
       {deleting && (
         <Dialog
           title="删除会话？"
@@ -847,21 +881,21 @@ function RunStatus({ run }: { run: Run }) {
   const scaffold = run.error_code === "WORKFLOW_NOT_IMPLEMENTED";
   const saved = scaffold || run.status === "succeeded";
   let title = "处理未完成";
-  let text = "需求已保存，可继续补充。";
+  let text = run.error_message || "消息已保存，可重新发送问题。";
   if (active) {
-    title = "正在处理";
-    text = "处理过程中可以取消任务。";
+    title = "正在生成回复";
+    text = "正在调用 DeepSeek，可以取消当前回复。";
   } else if (scaffold) {
     title = "需求已保存";
     text =
       "当前支持保存需求和查看历史会话，暂不支持生成完整行程。你可以继续补充出发时间、预算等信息。";
-  } else if (run.status === "cancelled") title = "任务已取消";
+  } else if (run.status === "cancelled") { title = "回复已取消"; text = "消息已保存，可以继续提问。"; }
   else if (run.status === "waiting_user") {
     title = "请补充信息";
     text = "请补充出发时间、地点或预算。";
   } else if (run.status === "succeeded") {
-    title = "处理完成";
-    text = "消息已保存。";
+    title = "回复已完成";
+    text = "对话已保存。";
   }
   return (
     <div

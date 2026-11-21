@@ -75,6 +75,40 @@ svg {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+.source-note {
+  display: block;
+  margin-top: 10px;
+  color: #627263;
+  font-size: 0.75rem;
+}
+.message-sources { margin-top: 16px; max-width: 100%; }
+.message-sources > strong { font-size: 0.8125rem; }
+.message-sources small { font-weight: 400; color: #627263; }
+.source-card { border: 1px solid #dce4d7; border-radius: 8px; margin-top: 8px; }
+.source-card summary { cursor: pointer; padding: 10px; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.source-card summary > small { display: block; margin: 4px 0 0 30px; }
+.source-tag { display: inline-block; margin-right: 8px; color: #126957; font-weight: 700; }
+.source-detail { padding: 0 12px 12px; font-size: 0.75rem; overflow-wrap: anywhere; }
+.message .source-detail p { font-size: 0.75rem; line-height: 1.6; }
+.source-detail blockquote { margin: 8px 0; border-left: 3px solid #a9bca3; padding-left: 10px; white-space: pre-wrap; }
+.source-detail dl { margin-bottom: 0; }
+.source-detail dt { margin-top: 6px; color: #627263; }
+.source-detail dd { margin-left: 0; font-family: monospace; }
+.knowledge-form { display: grid; gap: 12px; margin: 18px 0; }
+.knowledge-form label { display: grid; gap: 6px; font-size: 0.8125rem; }
+.knowledge-form input, .knowledge-form textarea, .knowledge-form select {
+  width: 100%; min-width: 0; padding: 9px; border: 1px solid #dce4d7; border-radius: 6px;
+  background: white; color: inherit; font: inherit;
+}
+.knowledge-form textarea { resize: vertical; }
+.knowledge-list { padding: 0; list-style: none; }
+.knowledge-list li { border-top: 1px solid #dce4d7; padding: 12px 0; }
+.knowledge-list small { display: block; color: #627263; margin: 6px 0; }
+.dialog.knowledge-dialog { max-width: 620px; max-height: calc(100dvh - 32px); overflow: auto; }
+@media (max-width: 420px) {
+  .knowledge-button { min-width: 38px; padding: 8px; }
+  .knowledge-button > span { display: none; }
+}
 .skip-link {
   position: fixed;
   top: 8px;

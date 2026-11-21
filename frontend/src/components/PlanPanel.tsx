@@ -99,7 +99,7 @@ export function PlanPanel({
         <Route size={19} />
         <div>
           <strong>当前功能</strong>
-          <p>支持保存需求和查看历史会话，行程生成功能尚未开放。</p>
+          <p>支持文字聊天、知识库检索和来源查看，地图与完整行程生成功能尚未开放。</p>
         </div>
       </div>
     </aside>

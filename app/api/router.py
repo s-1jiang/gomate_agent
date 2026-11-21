@@ -6,16 +6,19 @@ from app import __version__
 from app.api.dependencies import CurrentUser, DatabaseDep, TokenDep
 from app.core.security import token_digest
 from app.db.repositories import AuthRepository, ConversationRepository, RunRepository
+from app.retrieval.repository import KnowledgeRepository
 from app.schemas.api import (
     ConversationCreate,
     ConversationOut,
     Credentials,
     MessageCreate,
     MessageOut,
+    RetrievalSource,
     RunOut,
     TokenOut,
     UserOut,
 )
+from app.schemas.knowledge import DocumentCreate, DocumentOut, KnowledgeSearch
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/api/v1")
@@ -26,9 +29,18 @@ Limit = Annotated[int, Query(ge=1, le=100)]
 def capabilities():
     return {
         "version": __version__,
-        "stage": "foundation",
-        "available": ["auth", "conversations", "message_persistence", "run_lifecycle"],
+        "stage": "text_chat",
+        "available": [
+            "auth",
+            "conversations",
+            "message_persistence",
+            "run_lifecycle",
+            "text_chat",
+            "private_text_knowledge",
+            "retrieval_sources",
+        ],
         "planned": ["planning_workflow", "mcp", "private_retrieval", "profiles", "map_ui"],
+        "retrieval_method": "lexical",
         "model_provider": "deepseek",
         "proposed_map_provider": "amap",
     }
@@ -118,7 +130,7 @@ def send_message(
         request.app.state.settings,
     )
     if created:
-        background_tasks.add_task(repository.finish_scaffold, run["id"])
+        background_tasks.add_task(request.app.state.chat.run, user, run["id"])
     return run
 
 
@@ -128,5 +140,37 @@ def get_run(run_id: str, database: DatabaseDep, user: CurrentUser):
 
 
 @router.post("/runs/{run_id}/cancel", response_model=RunOut, tags=["runs"])
-def cancel_run(run_id: str, database: DatabaseDep, user: CurrentUser):
-    return RunRepository(database, user).cancel(run_id)
+async def cancel_run(run_id: str, request: Request, database: DatabaseDep, user: CurrentUser):
+    result = RunRepository(database, user).cancel(run_id)
+    request.app.state.chat.cancel(user, run_id)
+    return result
+
+
+@router.post(
+    "/knowledge/documents",
+    response_model=DocumentOut,
+    status_code=201,
+    tags=["knowledge"],
+)
+def create_document(body: DocumentCreate, database: DatabaseDep, user: CurrentUser):
+    return KnowledgeRepository(database, user).create(body)
+
+
+@router.get("/knowledge/documents", response_model=list[DocumentOut], tags=["knowledge"])
+def list_documents(
+    database: DatabaseDep,
+    user: CurrentUser,
+    session_id: Annotated[str | None, Query(max_length=128)] = None,
+):
+    return KnowledgeRepository(database, user).list_documents(session_id)
+
+
+@router.delete("/knowledge/documents/{document_id}", status_code=204, tags=["knowledge"])
+def delete_document(document_id: str, database: DatabaseDep, user: CurrentUser):
+    KnowledgeRepository(database, user).delete(document_id)
+    return Response(status_code=204)
+
+
+@router.post("/knowledge/search", response_model=list[RetrievalSource], tags=["knowledge"])
+def search_knowledge(body: KnowledgeSearch, database: DatabaseDep, user: CurrentUser):
+    return KnowledgeRepository(database, user).search(body.session_id, body.query, body.limit)

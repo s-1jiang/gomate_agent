@@ -13,7 +13,7 @@ def test_health_openapi_and_migration_are_ready(client):
     assert "/api/v1/runs/{run_id}" in client.get("/openapi.json").json()["paths"]
     client.app.state.database.migrate()
     with client.app.state.database.connect() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
 
@@ -65,8 +65,9 @@ def test_message_run_idempotency_and_failure_are_explicit(client, login):
     run_id = response.json()["id"]
     run = client.get(f"/api/v1/runs/{run_id}", headers=headers).json()
     assert run["status"] == "failed"
-    assert run["error_code"] == "WORKFLOW_NOT_IMPLEMENTED"
-    assert run["tool_calls"] == run["llm_calls"] == run["external_requests"] == 0
+    assert run["error_code"] == "PROVIDER_NOT_CONFIGURED"
+    assert run["tool_calls"] == 1
+    assert run["llm_calls"] == run["external_requests"] == 0
     assert client.post(path, headers=headers, json=body).json()["id"] == run_id
     response = client.post(path, headers=headers, json={**body, "content": "different"})
     assert response.status_code == 409

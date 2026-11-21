@@ -53,6 +53,7 @@ def test_lease_busy_expiry_fencing_and_late_result(client, settings):
     session = ConversationRepository(database, auth).create("private")["id"]
     repository = RunRepository(database, auth)
     first, _ = repository.accept(session, "one", "first", settings)
+    first_started = repository.start(first["id"])
     from app.core.errors import AppError
 
     with pytest.raises(AppError, match="此会话已有运行中的任务"):
@@ -61,14 +62,29 @@ def test_lease_busy_expiry_fencing_and_late_result(client, settings):
         connection.execute("UPDATE runs SET deadline = 0")
         connection.execute("UPDATE session_leases SET expires_at = 0")
     second, _ = repository.accept(session, "two", "second", settings)
-    repository.finish_scaffold(first["id"])
+    assert not repository.finish(
+        first["id"],
+        first_started["fencing_token"],
+        "STALE_REPLY",
+        [],
+        "no_matches",
+        {"tool": 0, "llm": 0, "external": 0},
+    )
     with database.connect() as connection:
         lease = connection.execute("SELECT * FROM session_leases").fetchone()
         assert lease["run_id"] == second["id"]
         assert lease["fencing_token"] == 2
     assert repository.get(first["id"])["status"] == "timed_out"
+    second_started = repository.start(second["id"])
     assert repository.cancel(second["id"])["status"] == "cancelled"
-    repository.finish_scaffold(second["id"])
+    assert not repository.finish(
+        second["id"],
+        second_started["fencing_token"],
+        "CANCELLED_REPLY",
+        [],
+        "no_matches",
+        {"tool": 0, "llm": 0, "external": 0},
+    )
     assert repository.get(second["id"])["status"] == "cancelled"
 
 

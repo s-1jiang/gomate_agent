@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -19,6 +20,7 @@ def test_deepseek_request_format_budget_and_reasoning_not_returned(settings):
             requests.append(request)
             assert str(request.url) == "https://api.deepseek.com/chat/completions"
             assert request.headers["Authorization"] == "Bearer fake-test-key"
+            assert json.loads(request.content)["max_tokens"] == settings.chat_max_output_tokens
             return httpx.Response(
                 200,
                 json={
@@ -50,8 +52,16 @@ def test_deepseek_request_format_budget_and_reasoning_not_returned(settings):
     "status,body,code",
     [
         (429, {}, "PROVIDER_RATE_LIMITED"),
-        (401, {"error": {"message": "PROVIDER_SECRET_CANARY"}}, "PROVIDER_UNAVAILABLE"),
+        (401, {"error": {"message": "PROVIDER_SECRET_CANARY"}}, "PROVIDER_AUTH_FAILED"),
+        (402, {}, "PROVIDER_BALANCE_LOW"),
+        (400, {}, "PROVIDER_BAD_REQUEST"),
+        (500, {}, "PROVIDER_UNAVAILABLE"),
         (200, {"choices": []}, "INVALID_MODEL_OUTPUT"),
+        (
+            200,
+            {"choices": [{"message": {"content": "cut"}, "finish_reason": "length"}]},
+            "LLM_OUTPUT_TRUNCATED",
+        ),
     ],
 )
 def test_provider_errors_are_distinct_and_not_retried(settings, status, body, code):

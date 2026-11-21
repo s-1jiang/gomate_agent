@@ -9,7 +9,7 @@ from app.tools.budget import RunBudget
 
 
 class DeepSeekClient:
-    """Text-completion adapter. Not yet wired into a planning or tool-calling workflow."""
+    """Non-streaming text adapter used by the conversation service."""
 
     def __init__(self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
@@ -39,13 +39,22 @@ class DeepSeekClient:
                         "model": self.settings.deepseek_model,
                         "messages": [message.model_dump() for message in messages],
                         "stream": False,
+                        "max_tokens": self.settings.chat_max_output_tokens,
                     },
                 )
+                if response.status_code in (401, 403):
+                    raise AppError("PROVIDER_AUTH_FAILED", "DeepSeek 密钥无效或没有访问权限", 503)
+                if response.status_code == 402:
+                    raise AppError("PROVIDER_BALANCE_LOW", "DeepSeek 账户余额不足", 503)
+                if response.status_code == 400:
+                    raise AppError("PROVIDER_BAD_REQUEST", "请检查 DeepSeek 模型和接口配置", 503)
                 if response.status_code == 429:
                     raise AppError("PROVIDER_RATE_LIMITED", "DeepSeek 请求限流", 503)
                 if not response.is_success:
                     raise AppError("PROVIDER_UNAVAILABLE", "DeepSeek 请求失败", 503)
                 payload = response.json()
+                if payload["choices"][0].get("finish_reason") == "length":
+                    raise AppError("LLM_OUTPUT_TRUNCATED", "回答超过长度限制，请缩小问题范围", 502)
                 content = payload["choices"][0]["message"]["content"]
                 if not isinstance(content, str) or not content.strip():
                     raise ValueError("Missing text content")

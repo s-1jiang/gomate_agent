@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import type { Conversation, Message, Run } from "../api";
+import type { Conversation, Message, RetrievalSource, Run } from "../api";
 
 const USER = {
   id: "user-a",
@@ -38,6 +38,9 @@ function response(body: unknown, status = 200) {
 function backend({
   initial = [] as Conversation[],
   failFirstSend = false,
+  replyText = "可以先从附近的公园开始。",
+  replySources = [] as RetrievalSource[],
+  runFailure = null as { code: string; message: string } | null,
 } = {}) {
   let conversations = [...initial];
   const messages: Message[] = [];
@@ -78,12 +81,17 @@ function backend({
         return response(RUN, 202);
       }
       if (path.includes("/messages?")) return response(messages);
-      if (path === "/api/v1/runs/run-1")
-        return response({
-          ...RUN,
-          status: "failed",
-          error_code: "WORKFLOW_NOT_IMPLEMENTED",
-        });
+      if (path === "/api/v1/runs/run-1") {
+        if (!runFailure && !messages.some((item) => item.id === "reply-1")) {
+          messages.push({
+            id: "reply-1", role: "assistant", content: replyText,
+            client_message_id: null, created_at: "2026-11-21T00:00:02Z",
+            sources: replySources, retrieval_status: replySources.length ? "retrieved" : "no_matches",
+          });
+        }
+        return response({ ...RUN, status: runFailure ? "failed" : "succeeded",
+          error_code: runFailure?.code || null, error_message: runFailure?.message || null });
+      }
       if (path.startsWith("/api/v1/conversations/") && method === "DELETE") {
         conversations = conversations.filter((item) => !path.endsWith(item.id));
         return response(null, 204);
@@ -225,7 +233,7 @@ describe("GoMate workspace", () => {
     );
   });
 
-  it("persists an idea and shows the actual workflow capability instead of a fabricated itinerary", async () => {
+  it("loads the assistant answer after completion and identifies replies with no retrieved evidence", async () => {
     sessionStorage.setItem("gomate.session", "test-token");
     backend();
     const user = userEvent.setup();
@@ -240,11 +248,13 @@ describe("GoMate workspace", () => {
       "下班后想去散步",
     );
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("需求已保存")).toBeInTheDocument();
+    expect(await screen.findByText("回复已完成")).toBeInTheDocument();
     expect(screen.getByText("下班后想去散步")).toBeInTheDocument();
     expect(
-      screen.getByText(/暂不支持生成完整行程。你可以继续补充/),
+      await screen.findByText("可以先从附近的公园开始。"),
     ).toBeInTheDocument();
+    expect(screen.getByText("未检索到相关资料，本次回复由模型生成。")).toBeInTheDocument();
+    expect(screen.queryByLabelText("检索来源")).not.toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "输入出行需求" }),
     ).toHaveValue("");
@@ -275,7 +285,7 @@ describe("GoMate workspace", () => {
       expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled(),
     );
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    await screen.findByText("需求已保存");
+    await screen.findByText("回复已完成");
     expect(sendBodies).toHaveLength(2);
     expect(sendBodies[0].client_message_id).toBe(
       sendBodies[1].client_message_id,
@@ -287,6 +297,83 @@ describe("GoMate workspace", () => {
           call.options?.method === "POST",
       ),
     ).toHaveLength(1);
+  });
+
+  it("shows server-provided evidence, original excerpt and the distinction between retrieval and citation", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const source: RetrievalSource = {
+      label: "R1", cited: true, available: true, title: "周末笔记",
+      source_ref: "周末笔记.md", document_id: "document-1", document_version: 1,
+      chunk_id: "chunk-1", start_line: 2, end_line: 4, excerpt: "公园沿河，适合散步。",
+      content_hash: "test-content-hash", document_hash: "test-document-hash",
+      retrieval_method: "lexical", scope: "session", retrieved_at: RUN.created_at,
+    };
+    backend({ replyText: "可以去河边公园。[R1]", replySources: [source, {
+      ...source, label: "R2", cited: false, title: "另一个召回片段",
+    }] });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("tester");
+    await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "周末散步");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await screen.findByText("可以去河边公园。[R1]");
+    const sources = screen.getByRole("region", { name: "检索来源" });
+    expect(within(sources).getByText("正文已引用")).toBeInTheDocument();
+    expect(within(sources).getByText("已召回，正文未引用")).toBeInTheDocument();
+    await user.click(within(sources).getByText("周末笔记"));
+    const first = within(sources.querySelector("details")!);
+    expect(first.getByText("公园沿河，适合散步。")).toBeVisible();
+    expect(first.getByText(/周末笔记.md · 第 2–4 行 · 版本 1/)).toBeVisible();
+    expect(first.getByText("test-content-hash")).toBeVisible();
+  });
+
+  it("shows provider failures without inventing an assistant answer", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    backend({ runFailure: { code: "PROVIDER_AUTH_FAILED", message: "DeepSeek 密钥无效或没有访问权限" } });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("tester");
+    await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "你好");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByText("DeepSeek 密钥无效或没有访问权限")).toBeInTheDocument();
+    expect(screen.queryByText("可以先从附近的公园开始。")).not.toBeInTheDocument();
+  });
+
+  it("imports text into the chosen knowledge scope and confirms deletion", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const { fetchMock, calls } = backend();
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path.startsWith("/api/v1/knowledge/documents")) {
+        calls.push({ path, options });
+        if (options?.method === "POST") {
+          const body = JSON.parse(String(options.body));
+          return Promise.resolve(response({ ...body, id: "doc-1", document_version: 1,
+            chunk_count: 1, content_hash: "hash", created_at: RUN.created_at }, 201));
+        }
+        return Promise.resolve(response(options?.method === "DELETE" ? null : [], options?.method === "DELETE" ? 204 : 200));
+      }
+      return original(path, options);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("tester");
+    await user.click(screen.getByRole("button", { name: "知识库" }));
+    const dialog = screen.getByRole("dialog", { name: "知识库" });
+    await user.type(within(dialog).getByLabelText("资料名称"), "散步笔记");
+    await user.type(within(dialog).getByLabelText("来源说明"), "walk.md");
+    await user.type(within(dialog).getByLabelText("资料正文"), "河边适合散步。");
+    await user.click(within(dialog).getByRole("button", { name: "加入知识库" }));
+    await within(dialog).findByText("资料已加入，可在后续对话中检索。");
+    const saved = calls.find((call) => call.path === "/api/v1/knowledge/documents" && call.options?.method === "POST");
+    expect(JSON.parse(String(saved?.options?.body))).toMatchObject({
+      scope: "user", session_id: null, source_ref: "walk.md", content: "河边适合散步。",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "删除资料：散步笔记" }));
+    expect(calls.some((call) => call.options?.method === "DELETE")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "确认删除资料" }));
+    await within(dialog).findByText("资料已删除，不再参与检索。");
+    expect(within(dialog).queryByText("散步笔记")).not.toBeInTheDocument();
   });
 
   it("waits for explicit deletion confirmation and removes only the chosen conversation", async () => {

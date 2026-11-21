@@ -56,27 +56,36 @@ def main():
         session_id = request(
             "/api/v1/conversations", method="POST", body={"title": "Docker smoke"}
         )["id"]
-        path = f"/api/v1/conversations/{session_id}/messages"
-        body = {
-            "client_message_id": uuid4().hex,
-            "content": "Docker smoke persistence marker",
-        }
-        run = request(path, method="POST", body=body)
-        repeat = request(path, method="POST", body=body)
-        assert repeat["id"] == run["id"]
-        result = request(f"/api/v1/runs/{run['id']}")
-        assert result["status"] == "failed" and result["error_code"] == "WORKFLOW_NOT_IMPLEMENTED"
-        assert result["llm_calls"] == result["external_requests"] == 0
+        doc = request(
+            "/api/v1/knowledge/documents",
+            method="POST",
+            body={
+                "title": "Docker smoke note",
+                "source_ref": "smoke.txt",
+                "content": "smokewalk riverside",
+                "scope": "session",
+                "session_id": session_id,
+            },
+        )
+        hits = request(
+            "/api/v1/knowledge/search",
+            method="POST",
+            body={
+                "query": "smokewalk",
+                "session_id": session_id,
+            },
+        )
+        assert hits[0]["document_id"] == doc["id"] and hits[0]["label"] == "R1"
         if options.check_restart:
             subprocess.run(["docker", "compose", "restart", "backend"], check=True)
             ready()
-        messages = request(path + "?limit=100")
-        assert len(messages) == 1 and messages[0]["content"] == body["content"]
-        print(
-            "PASS: frontend, proxy, auth, conversations, message idempotency and actual Run state"
-        )
+        docs = request(f"/api/v1/knowledge/documents?session_id={session_id}")
+        assert docs[0]["id"] == doc["id"]
+        assert request("/api/v1/knowledge/documents") == []
+        request(f"/api/v1/knowledge/documents/{doc['id']}", method="DELETE")
+        print("PASS: frontend, proxy, auth, knowledge import, retrieval evidence and session scope")
         if options.check_restart:
-            print("PASS: SQLite data and login survive backend container restart")
+            print("PASS: SQLite knowledge and login survive backend container restart")
     finally:
         if token:
             if session_id:

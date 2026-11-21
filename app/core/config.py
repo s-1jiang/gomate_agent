@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     llm_timeout_seconds: float = Field(default=30, gt=0)
+    chat_history_messages: int = Field(default=20, ge=1, le=100)
+    chat_history_chars: int = Field(default=40000, ge=16000, le=160000)
+    chat_max_output_tokens: int = Field(default=2048, ge=128, le=8192)
     map_provider: Literal["amap"] = "amap"
     amap_web_service_key: SecretStr = SecretStr("")
     amap_js_api_key: str = ""

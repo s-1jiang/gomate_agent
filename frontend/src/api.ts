@@ -14,6 +14,44 @@ export interface Message {
   content: string;
   client_message_id: string | null;
   created_at: string;
+  sources?: RetrievalSource[];
+  retrieval_status?: "no_matches" | "retrieved" | null;
+}
+export interface RetrievalSource {
+  label: string;
+  cited: boolean;
+  available: boolean;
+  title?: string | null;
+  source_ref?: string | null;
+  document_id?: string | null;
+  document_version?: number | null;
+  chunk_id?: string | null;
+  start_line?: number | null;
+  end_line?: number | null;
+  excerpt?: string | null;
+  content_hash?: string | null;
+  document_hash?: string | null;
+  retrieved_at?: string | null;
+  retrieval_method?: "lexical" | null;
+  scope?: "session" | "user" | null;
+}
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  source_ref: string;
+  scope: "session" | "user";
+  session_id: string | null;
+  document_version: number;
+  content_hash: string;
+  chunk_count: number;
+  created_at: string;
+}
+export interface KnowledgeInput {
+  title: string;
+  source_ref: string;
+  content: string;
+  scope: "session" | "user";
+  session_id: string | null;
 }
 export interface Run {
   id: string;
@@ -92,7 +130,9 @@ export class ApiClient {
       const code = body?.error?.code || `HTTP_${response.status}`;
       let message = body?.error?.message || "操作未完成，请稍后重试。";
       if (response.status === 422)
-        message = "请检查填写内容；用户名至少 3 位，密码至少 12 位。";
+        message = path.startsWith("/auth/")
+          ? "请检查填写内容；用户名至少 3 位，密码至少 12 位。"
+          : "请检查填写内容、长度和资料的可见范围。";
       if (response.status === 429) message = "操作过于频繁，请稍后重试。";
       throw new ApiError(response.status, code, message);
     }
@@ -158,6 +198,20 @@ export class ApiClient {
   cancelRun(id: string) {
     return this.request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, {
       method: "POST",
+    });
+  }
+  knowledge(sessionId: string | null, signal?: AbortSignal) {
+    const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+    return this.request<KnowledgeDocument[]>(`/knowledge/documents${query}`, { signal });
+  }
+  addKnowledge(body: KnowledgeInput, signal?: AbortSignal) {
+    return this.request<KnowledgeDocument>("/knowledge/documents", {
+      method: "POST", body: JSON.stringify(body), signal,
+    });
+  }
+  deleteKnowledge(id: string, signal?: AbortSignal) {
+    return this.request<void>(`/knowledge/documents/${encodeURIComponent(id)}`, {
+      method: "DELETE", signal,
     });
   }
 }

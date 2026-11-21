@@ -11,27 +11,34 @@ from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.database import Database
 from app.db.repositories import interrupt_pending_runs
+from app.integrations.deepseek import DeepSeekClient
 from app.observability.http import request_context
+from app.services.chat import ChatService
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings()
     database = Database(config.database_path)
+    chat = ChatService(database, config, DeepSeekClient(config))
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.migrate()
         interrupt_pending_runs(database)
-        yield
+        try:
+            yield
+        finally:
+            await chat.close()
 
     application = FastAPI(
         title=config.app_name,
         version=__version__,
         lifespan=lifespan,
-        description="GoMate 基础框架：认证、会话、消息与运行记录。规划工作流尚未接入。",
+        description="GoMate：文字聊天、私有文本知识检索与来源引用。地图规划尚未接入。",
     )
     application.state.settings = config
     application.state.database = database
+    application.state.chat = chat
     application.middleware("http")(request_context)
 
     def error_response(request: Request, code: str, message: str, status: int, details=None):
