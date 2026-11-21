@@ -18,3 +18,8 @@ eval/reports/*
 !eval/reports/.gitkeep
 .coverage
 htmlcov/
+node_modules/
+frontend/coverage/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*

@@ -1,10 +1,9 @@
-# Web 页面接入边界
+# Web 页面
 
-本阶段提供 `/docs` 接口调试页面，业务 Web UI 留待 P4 实现。
+React + TypeScript + Vite 前端位于仓库根目录 `frontend/`。
 
-- 前端调用 FastAPI `/api/v1`，使用认证请求头；不要把 Token 放入 URL。
-- 地图方案建议使用高德 JS API 2.0，浏览器 JS Key 与后端 Web 服务 Key 分开。
-- 地点、路线、时间轴、费用和报告读取同一版本 Plan JSON。
-- 不在前端另行算路来覆盖后端已校验的行程；坐标保留 `GCJ02` 标签。
-- JS 安全密钥按高德官方说明配置固定服务代理，不通过公开接口返回安全密钥。
-- 只允许地图展示所需的固定代理目标；不要实现任意 URL 转发。
+本地开发通过 Vite 将 `/api` 和 `/health` 转发给 FastAPI；Docker 中由 Nginx 完成同源转发。
+生产静态文件独立封装在前端镜像中，FastAPI 保留 API 与 `/docs` 调试页面。
+
+当前接通注册、登录、会话、消息保存和 Run 状态；行程地图为明确的待生成功能，尚未调用高德。
+地图接入仍遵循 `docs/PROVIDERS.md` 的 Plan JSON 和坐标系约定。
