@@ -7,6 +7,9 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_PATH: /app/data/gomate.db
+      TOKEN_TTL_SECONDS: ${TOKEN_TTL_SECONDS:-86400}
+      REMEMBER_TOKEN_TTL_SECONDS: ${REMEMBER_TOKEN_TTL_SECONDS:-2592000}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}

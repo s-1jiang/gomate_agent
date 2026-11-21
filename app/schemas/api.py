@@ -21,6 +21,10 @@ class Credentials(InputModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
 
 
+class LoginCredentials(Credentials):
+    remember_me: bool = Field(default=False, strict=True)
+
+
 class UserOut(BaseModel):
     id: str
     username: str

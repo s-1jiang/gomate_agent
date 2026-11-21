@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     app_name: str = "GoMate"
     database_path: Path = Path("data/gomate.db")
     token_ttl_seconds: int = Field(default=86400, ge=60)
+    remember_token_ttl_seconds: int = Field(default=2592000, ge=60, le=7776000)
+    auth_cookie_secure: bool = False
     login_max_attempts: int = Field(default=5, ge=1)
     login_window_seconds: int = Field(default=300, ge=1)
     run_timeout_seconds: int = Field(default=120, gt=0)

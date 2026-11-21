@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException
 
 from app import __version__
 from app.api.router import router
+from app.core.browser_session import SESSION_COOKIE, clear_browser_session
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.database import Database
@@ -50,7 +51,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if details is not None:
             error["details"] = details
         headers = {"WWW-Authenticate": "Bearer"} if status == 401 else None
-        return JSONResponse({"error": error}, status_code=status, headers=headers)
+        response = JSONResponse({"error": error}, status_code=status, headers=headers)
+        if (
+            status == 401
+            and request.cookies.get(SESSION_COOKIE)
+            and request.url.path != "/api/v1/auth/login"
+        ):
+            clear_browser_session(response)
+        return response
 
     @application.exception_handler(AppError)
     async def app_error(request: Request, exc: AppError):

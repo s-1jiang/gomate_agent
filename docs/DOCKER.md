@@ -47,6 +47,7 @@ docker compose down
 - 前端的依赖锁在 `frontend/package-lock.json`，镜像使用 `npm ci`。
 - 根目录和前端目录分别提供 `.dockerignore`；源码凭证、Git 元数据、本机数据库、虚拟环境和 node_modules 不进入构建上下文。
 - DeepSeek、高德 Web 服务 Key 只由 Compose 在运行时传入 backend，前端镜像不包含这些密钥。
+- 浏览器保持登录默认 30 天，由 `REMEMBER_TOKEN_TTL_SECONDS` 控制；HTTP 本地访问默认 `AUTH_COOKIE_SECURE=false`，HTTPS 部署应设为 `true`。详见 [登录说明](LOGIN.md)。
 - `.env` 的环境变量可通过本机进程环境覆盖；不要把 `docker compose config` 展开的敏感值粘贴到日志或提交中，检查时使用 `docker compose config --quiet`。
 - 当前默认仅绑定宿主机 `127.0.0.1`，用于本地使用。公网部署需另行配置域名、HTTPS 和入口限流。
 

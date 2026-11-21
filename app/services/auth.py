@@ -14,15 +14,22 @@ class AuthService:
     def register(self, username: str, password: str) -> dict:
         return self.repository.register(username, hash_password(password))
 
-    def login(self, username: str, password: str, address: str) -> dict:
+    def login(
+        self, username: str, password: str, address: str, *, remember_me: bool = False
+    ) -> dict:
         self.repository.reserve_login(username, address, self.settings)
         user = self.repository.find_user(username)
         if not verify_password(password, user["password_hash"] if user else None):
             raise AppError("INVALID_CREDENTIALS", "用户名或密码错误", 401)
         token = new_token()
+        ttl = (
+            self.settings.remember_token_ttl_seconds
+            if remember_me
+            else self.settings.token_ttl_seconds
+        )
         self.repository.store_token(
             token_digest(token),
             user["id"],
-            time.time() + self.settings.token_ttl_seconds,
+            time.time() + ttl,
         )
-        return {"access_token": token, "expires_in": self.settings.token_ttl_seconds}
+        return {"access_token": token, "expires_in": ttl}

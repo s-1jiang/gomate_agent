@@ -1175,6 +1175,33 @@ svg {
   font-size: 0.8125rem;
   color: #acb6a4;
 }
+.auth-form .auth-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+}
+.auth-form .auth-options label {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.auth-form .auth-options input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--green);
+}
+.auth-remember-note {
+  margin: -10px 0 0;
+  color: #71816a;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.dialog.auth-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
 .password-field {
   position: relative;
   display: block;

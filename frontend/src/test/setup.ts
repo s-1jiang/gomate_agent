@@ -16,5 +16,6 @@ Element.prototype.scrollIntoView = vi.fn();
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
+  localStorage.clear();
   vi.unstubAllGlobals();
 });

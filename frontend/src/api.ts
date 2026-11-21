@@ -105,6 +105,7 @@ export class ApiClient {
   ): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
+    headers.set("X-GoMate-Request", "web");
     if (options.body) headers.set("Content-Type", "application/json");
     if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
     let response: Response;
@@ -112,6 +113,7 @@ export class ApiClient {
       response = await fetch(`/api/v1${path}`, {
         ...options,
         headers,
+        credentials: "same-origin",
         cache: "no-store",
         signal: options.signal
           ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
@@ -150,10 +152,10 @@ export class ApiClient {
       body: JSON.stringify(body),
     });
   }
-  login(body: Credentials) {
+  login(body: Credentials, rememberMe = false) {
     return this.request<Token>("/auth/login", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, remember_me: rememberMe }),
     });
   }
   logout() {

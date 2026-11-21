@@ -4,6 +4,12 @@ from fastapi import APIRouter, BackgroundTasks, Query, Request, Response
 
 from app import __version__
 from app.api.dependencies import CurrentUser, DatabaseDep, TokenDep
+from app.core.browser_session import (
+    SESSION_COOKIE,
+    check_browser_request,
+    clear_browser_session,
+    set_browser_session,
+)
 from app.core.security import token_digest
 from app.db.repositories import AuthRepository, ConversationRepository, RunRepository
 from app.retrieval.repository import KnowledgeRepository
@@ -11,6 +17,7 @@ from app.schemas.api import (
     ConversationCreate,
     ConversationOut,
     Credentials,
+    LoginCredentials,
     MessageCreate,
     MessageOut,
     RetrievalSource,
@@ -48,6 +55,7 @@ def capabilities():
 
 @router.post("/auth/register", response_model=UserOut, status_code=201, tags=["auth"])
 def register(body: Credentials, request: Request, database: DatabaseDep):
+    check_browser_request(request)
     return AuthService(AuthRepository(database), request.app.state.settings).register(
         body.username,
         body.password,
@@ -55,23 +63,44 @@ def register(body: Credentials, request: Request, database: DatabaseDep):
 
 
 @router.post("/auth/login", response_model=TokenOut, tags=["auth"])
-def login(body: Credentials, request: Request, database: DatabaseDep, response: Response):
+def login(body: LoginCredentials, request: Request, database: DatabaseDep, response: Response):
+    check_browser_request(request)
     response.headers["Cache-Control"] = "no-store"
-    return AuthService(AuthRepository(database), request.app.state.settings).login(
+    repository = AuthRepository(database)
+    settings = request.app.state.settings
+    result = AuthService(repository, settings).login(
         body.username,
         body.password,
         request.client.host if request.client else "unknown",
+        remember_me=body.remember_me,
     )
+    previous = request.cookies.get(SESSION_COOKIE)
+    if previous:
+        repository.revoke(token_digest(previous))
+    if body.remember_me:
+        set_browser_session(
+            response, request, result["access_token"], result["expires_in"], settings
+        )
+    else:
+        clear_browser_session(response)
+    return result
 
 
 @router.post("/auth/logout", status_code=204, tags=["auth"])
-def logout(database: DatabaseDep, user: CurrentUser, token: TokenDep):
-    AuthRepository(database).revoke(token_digest(token))
-    return Response(status_code=204)
+def logout(request: Request, database: DatabaseDep, token: TokenDep):
+    repository = AuthRepository(database)
+    repository.revoke(token_digest(token))
+    previous = request.cookies.get(SESSION_COOKIE)
+    if previous and previous != token:
+        repository.revoke(token_digest(previous))
+    response = Response(status_code=204, headers={"Cache-Control": "no-store"})
+    clear_browser_session(response)
+    return response
 
 
 @router.get("/me", response_model=UserOut, tags=["auth"])
-def me(database: DatabaseDep, token: TokenDep):
+def me(database: DatabaseDep, token: TokenDep, response: Response):
+    response.headers["Cache-Control"] = "no-store"
     return AuthRepository(database).authenticate(token_digest(token))
 
 

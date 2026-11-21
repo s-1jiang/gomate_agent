@@ -2,19 +2,23 @@ import { useState, type FormEvent } from "react";
 import { Compass, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { ApiClient, errorMessage, type User } from "../api";
 import { Dialog } from "./Dialog";
+import { loginPreferences, rememberedUsername, saveLoginPreferences } from "../loginPreferences";
 
 export function AuthDialog({
   onClose,
   onAuthenticated,
 }: {
   onClose: () => void;
-  onAuthenticated: (token: string, user: User) => void;
+  onAuthenticated: (token: string, user: User, keepSignedIn: boolean) => void;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [registered, setRegistered] = useState(false);
+  const [preferences] = useState(loginPreferences);
+  const [rememberCredentials, setRememberCredentials] = useState(preferences.rememberCredentials);
+  const [keepSignedIn, setKeepSignedIn] = useState(preferences.keepSignedIn);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,9 +35,10 @@ export function AuthDialog({
         await api.register(credentials);
         setRegistered(true);
       }
-      const result = await api.login(credentials);
+      const result = await api.login(credentials, keepSignedIn);
       const user = await new ApiClient(result.access_token).me();
-      onAuthenticated(result.access_token, user);
+      saveLoginPreferences(credentials, rememberCredentials, keepSignedIn);
+      onAuthenticated(result.access_token, user, keepSignedIn);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -46,6 +51,7 @@ export function AuthDialog({
       title={mode === "login" ? "登录逛搭" : "注册账号"}
       onClose={onClose}
       busy={busy}
+      className="auth-dialog"
     >
       <div className="auth-brand">
         <Compass size={24} />
@@ -74,6 +80,8 @@ export function AuthDialog({
         <label>
           用户名
           <input
+            key={mode}
+            defaultValue={mode === "login" ? rememberedUsername() : ""}
             name="username"
             autoComplete="username"
             required
@@ -110,6 +118,21 @@ export function AuthDialog({
             </button>
           </span>
         </label>
+        <div className="auth-options">
+          <label>
+            <input type="checkbox" checked={rememberCredentials} disabled={busy}
+              onChange={(event) => setRememberCredentials(event.target.checked)} />
+            记住账号密码
+          </label>
+          <label>
+            <input type="checkbox" checked={keepSignedIn} disabled={busy}
+              onChange={(event) => setKeepSignedIn(event.target.checked)} />
+            保持登录
+          </label>
+        </div>
+        <p className="auth-remember-note">
+          密码由浏览器密码管理器保存和填充，请按浏览器提示确认。保持登录默认有效期为 30 天。
+        </p>
         {error && (
           <p className="form-error" role="alert">
             {error}

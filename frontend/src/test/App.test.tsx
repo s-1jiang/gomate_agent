@@ -41,7 +41,9 @@ function backend({
   replyText = "可以先从附近的公园开始。",
   replySources = [] as RetrievalSource[],
   runFailure = null as { code: string; message: string } | null,
+  cookieSession = false,
 } = {}) {
+  let signedInCookie = cookieSession;
   let conversations = [...initial];
   const messages: Message[] = [];
   const sendBodies: { content: string; client_message_id: string }[] = [];
@@ -51,15 +53,21 @@ function backend({
       calls.push({ path, options });
       const method = options?.method || "GET";
       if (path === "/health/ready") return response({ status: "ok" });
-      if (path === "/api/v1/me") return response(USER);
+      if (path === "/api/v1/me") {
+        if (!signedInCookie && !new Headers(options?.headers).has("Authorization"))
+          return response({ error: { code: "UNAUTHORIZED", message: "请先登录" } }, 401);
+        return response(USER);
+      }
       if (path === "/api/v1/auth/register") return response(USER, 201);
-      if (path === "/api/v1/auth/login")
+      if (path === "/api/v1/auth/login") {
+        signedInCookie = JSON.parse(String(options?.body)).remember_me === true;
         return response({
           access_token: "test-token",
           expires_in: 86400,
           token_type: "bearer",
         });
-      if (path === "/api/v1/auth/logout") return response(null, 204);
+      }
+      if (path === "/api/v1/auth/logout") { signedInCookie = false; return response(null, 204); }
       if (path.startsWith("/api/v1/conversations?"))
         return response(conversations);
       if (path === "/api/v1/conversations" && method === "POST") {
@@ -226,11 +234,89 @@ describe("GoMate workspace", () => {
     expect(
       screen.getByRole("textbox", { name: "输入出行需求" }),
     ).toHaveValue("周末去逛逛");
-    expect(sessionStorage.getItem("gomate.session")).toBe("test-token");
+    expect(sessionStorage.getItem("gomate.session")).toBeNull();
+    expect(localStorage.getItem("gomate.rememberedUsername")).toBe("tester");
     expect(Object.values(sessionStorage)).not.toContain("test-password-123");
+    expect(Object.values(localStorage)).not.toContain("test-password-123");
     expect(calls.some((call) => call.path === "/api/v1/auth/register")).toBe(
       true,
     );
+  });
+
+  it("restores the persistent browser session after reopening without saving a password or token in web storage", async () => {
+    const { calls } = backend({ cookieSession: true });
+    const first = render(<App />);
+    await screen.findByText("tester");
+    first.unmount();
+    sessionStorage.clear();
+    render(<App />);
+    await screen.findByText("tester");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.path === "/api/v1/me").length).toBeGreaterThanOrEqual(2);
+    expect(calls.some((call) => call.path === "/api/v1/auth/login")).toBe(false);
+    expect(sessionStorage.getItem("gomate.session")).toBeNull();
+    expect(localStorage.getItem("gomate.session")).toBeNull();
+    const restore = calls.filter((call) => call.path === "/api/v1/me").at(-1)!;
+    expect(restore.options?.credentials).toBe("same-origin");
+    expect(new Headers(restore.options?.headers).has("Authorization")).toBe(false);
+  });
+
+  it("uses a tab session when keep-login is unchecked and forgets it on a new browser session", async () => {
+    const { calls } = backend();
+    const user = userEvent.setup();
+    const first = render(<App />);
+    await user.click(await screen.findByRole("button", { name: "登录" }));
+    expect(screen.getByRole("checkbox", { name: "保持登录" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "保持登录" }));
+    await user.click(screen.getByRole("checkbox", { name: "记住账号密码" }));
+    await user.type(screen.getByLabelText("用户名"), "tester");
+    await user.type(screen.getByLabelText("密码", { exact: true }), "test-password-123");
+    await user.click(screen.getByRole("button", { name: "登录逛搭" }));
+    await screen.findByText("tester");
+    expect(sessionStorage.getItem("gomate.session")).toBe("test-token");
+    expect(localStorage.getItem("gomate.rememberedUsername")).toBeNull();
+    const login = calls.find((call) => call.path === "/api/v1/auth/login")!;
+    expect(JSON.parse(String(login.options?.body)).remember_me).toBe(false);
+    first.unmount();
+    sessionStorage.clear();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "登录" })).toBeEnabled());
+    expect(screen.queryByText("tester")).not.toBeInTheDocument();
+  });
+
+  it("prefills a remembered username and revokes persistent login on explicit logout", async () => {
+    localStorage.setItem("gomate.rememberedUsername", "tester");
+    const { calls } = backend();
+    const user = userEvent.setup();
+    const first = render(<App />);
+    await user.click(await screen.findByRole("button", { name: "登录" }));
+    expect(screen.getByLabelText("用户名")).toHaveValue("tester");
+    expect(screen.getByLabelText("密码", { exact: true })).toHaveAttribute("autocomplete", "current-password");
+    await user.type(screen.getByLabelText("密码", { exact: true }), "test-password-123");
+    await user.click(screen.getByRole("button", { name: "登录逛搭" }));
+    await screen.findByText("tester");
+    expect(JSON.parse(String(calls.find((call) => call.path === "/api/v1/auth/login")?.options?.body)).remember_me).toBe(true);
+    await user.click(screen.getByRole("button", { name: "退出登录" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "登录" })).toBeEnabled());
+    first.unmount();
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "登录" })).toBeEnabled());
+    expect(screen.queryByText("tester")).not.toBeInTheDocument();
+    expect(localStorage.getItem("gomate.rememberedUsername")).toBe("tester");
+  });
+
+  it("reports a failed logout and preserves the authenticated view until the server can revoke it", async () => {
+    const { fetchMock } = backend({ cookieSession: true });
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/v1/auth/logout") return Promise.reject(new TypeError("Network down"));
+      return original(path, options);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "退出登录" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("退出登录未完成");
+    expect(screen.getByText("tester")).toBeInTheDocument();
   });
 
   it("loads the assistant answer after completion and identifies replies with no retrieved evidence", async () => {

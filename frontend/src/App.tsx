@@ -70,7 +70,7 @@ function timeLabel(value: string) {
 export default function App() {
   const [token, setToken] = useState(storedToken);
   const [user, setUser] = useState<User | null>(null);
-  const [checking, setChecking] = useState(!!token);
+  const [checking, setChecking] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -157,10 +157,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!token) {
-      setChecking(false);
-      return;
-    }
     const controller = new AbortController();
     setChecking(true);
     api
@@ -169,7 +165,10 @@ export default function App() {
         if (!controller.signal.aborted) setUser(nextUser);
       })
       .catch((error) => {
-        if (!controller.signal.aborted) handleError(error);
+        if (controller.signal.aborted) return;
+        // A fresh visitor has no JS-readable token; HttpOnly cookies are checked by /me.
+        if (!token && error instanceof ApiError && error.status === 401) return;
+        handleError(error);
       })
       .finally(() => {
         if (!controller.signal.aborted) setChecking(false);
@@ -309,9 +308,9 @@ export default function App() {
     setDrafts((previous) => ({ ...previous, [draftKey]: value }));
     composer.current?.focus();
   }
-  function authenticate(nextToken: string, nextUser: User) {
+  function authenticate(nextToken: string, nextUser: User, keepSignedIn: boolean) {
     epoch.current += 1;
-    saveToken(nextToken);
+    saveToken(keepSignedIn ? null : nextToken);
     setToken(nextToken);
     setUser(nextUser);
     setAuthOpen(false);
@@ -320,16 +319,16 @@ export default function App() {
   async function logout() {
     try {
       await api.logout();
-    } catch {
-      setNotice("已退出当前页面，服务连接暂时不可用。");
-    } finally {
       clearSession();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) clearSession();
+      else setNotice("退出登录未完成，请检查服务连接后重试。");
     }
   }
 
   async function send(event?: FormEvent) {
     event?.preventDefault();
-    if (!draft.trim() || sending || isActiveRun(currentRun) || historyLoading)
+    if (!draft.trim() || sending || checking || isActiveRun(currentRun) || historyLoading)
       return;
     if (!user) {
       setAuthOpen(true);
@@ -735,7 +734,7 @@ export default function App() {
                   }
                   onKeyDown={composerKey}
                    placeholder="输入问题，或描述城市、时间、人数和预算。"
-                  disabled={sending || checking}
+                  disabled={sending}
                 />
                 <div className="composer-toolbar">
                   <span>
