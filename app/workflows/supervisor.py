@@ -14,11 +14,15 @@ from app.schemas.maps import (
     SupervisorReview,
     WorkflowEvent,
 )
+from app.schemas.planning import Place
 from app.tools.context import ToolContext
 from app.tools.map_gateway import MapToolGateway
 from app.workflows.itinerary import ItineraryWorkflow
 
 ROUTING = """你是 GoMate 的 Supervisor。你负责分发任务、审查下属结果并决定是否要求修改。
+你有任务规划决策权：依据用户目标决定任务类型、专家分工、先后顺序、推荐地点及是否比较多个区域。
+tasks 按用户体验最合适的执行顺序排列；可改进关键词和组合，信息够用就行动，不为字段齐全反复追问。
+明确的地点范围、时间、预算和用户限制继续约束决策，地图事实必须来自实际查询。
 只输出 JSON，不输出思考过程。可使用三种格式：
 1. 普通文字问答：{"kind":"answer","answer":"正常答复","city":"","tasks":[]}
 2. 缺少必要信息：{"kind":"clarify","answer":"需要补充的问题","city":"","tasks":[]}
@@ -56,6 +60,9 @@ origin_name 只提取用户明确给定的完整出发地，不知道时留空�
 {"agent":"activity","keyword":"台球","instruction":"饭后打台球，优先与餐厅位置接近"}]}
 例如“大学附近吃什么，吃完打台球，推荐距离近的方案”使用 nearby，不强行安排明天的时间表。
 anchor_name 是用户提到的学校/校区/机构完整名称，短答要从当前会话补全；不能猜家或酒店。
+用户只给出活动顺序（如找咖啡馆喝咖啡看书、再逛周边）而没给地标时，anchor_name 留空。
+这也是合法 nearby 请求：程序先按城市查找并审查第一处目的地，再围绕它查后续地点，不能虚构中心。
+nearby 可设置 area_limit 为1或2：明确偏好或单个方案用1，需要比较校区/片区时用2，默认2。
 学校有多个校区时，程序会按地图实际查到的主要校区分别推荐，不先追问校区。
 明确要求具体日期时段、停留时长、返程或完整时间表时才使用 plan。
 本次可用能力：同城地点、步行/公交/驾车查询、行程时间校验和可选网页资料。不支持天气、实际预约、价格核验或GPS。
@@ -69,6 +76,7 @@ assumptions 仅供内部规划使用，不把假设列表、缺失信息诊断�
 REVIEW = """你是 Supervisor，审查地点研究 Agent 的结果与用户需求是否相符。
 这是地点候选审查，不是最终行程审查。后续 itinerary Agent 会安排时间、顺序、玩法并查询交通。
 从现有候选中选择可用子集即可，不要求所有候选合格；剔除酒店/住宅等无关条目后可直接通过。
+selected_ids 按你的推荐优先级排序；第一项是你认为最适合当前目标的地点，而不是供应商默认顺序。
 有大景区和其内部具体景点时优先选择具体子景点，避免汇总景区与内部各站重复占用行程。
 只有没有任何可用候选或城市/区域根本错误时才退回该任务，不为追求候选数量反复搜索。
 地点工具只提供名称、位置和类别。不能要求它核实营业/价格、计算交通、制定游玩时长或完整路线。
@@ -78,6 +86,8 @@ REVIEW = """你是 Supervisor，审查地点研究 Agent 的结果与用户需�
 周边搜索已固定所在校区/区域时，直接从实际候选给建议，不再追问校区、校门、口味或预算。
 周边餐饮与娱乐组合优先选彼此位置接近的地点，每类推荐1个即可；只有真实约束冲突才需要追问。
 search_area 不为空时，每个任务仅选择一个 evidence_id，answer 只写简短推荐理由，地点清单由程序补充。
+review_goal 指定分阶段任务时，只审查本阶段；下一步的地点由后续专家搜索，不能因尚未查后续地点退回。
+安静、有插座、适合久坐等要求须区分建议和已核实事实，地点工具没有提供的信息不能声称确认。
 禁止把未观测的地点、坐标、营业、价格或路线当作事实。未知要求需要澄清。
 只输出以下 JSON 格式之一，不输出推理过程：
 通过：{"decision":"approve","answer":"简短推荐理由，必要时引用[M1]等给定编号，不编造事实、不说明审查过程",
@@ -109,6 +119,7 @@ class SupervisorWorkflow:
             resumed = resume_recommendation(user_text, previous)
             if resumed:
                 decision, area = resumed
+                destination = previous.get("recommendation_context", {}).get("destination")
                 return await NearbyWorkflow(
                     self.settings, self.model, self.provider, self.search
                 ).execute(
@@ -119,6 +130,7 @@ class SupervisorWorkflow:
                     budget=budget,
                     emit=emit,
                     areas_override=[area],
+                    primary_destination=Place.model_validate(destination) if destination else None,
                 )
         route_prompt = [
             ChatMessage(
@@ -167,7 +179,9 @@ class SupervisorWorkflow:
             decision=decision, prompt=prompt, auth=auth, run=run, budget=budget, emit=emit
         )
 
-    async def search(self, *, decision, prompt, auth, run, budget, emit, search_center=None):
+    async def search(
+        self, *, decision, prompt, auth, run, budget, emit, search_center=None, review_goal=""
+    ):
         city = decision.city or self.settings.default_city
         if not city:
             await emit(
@@ -282,6 +296,7 @@ class SupervisorWorkflow:
                             "search_area": search_center.model_dump(mode="json")
                             if search_center
                             else None,
+                            "review_goal": review_goal,
                             "candidates": [
                                 {"evidence_id": key, **place.model_dump(mode="json")}
                                 for key, place in candidates.items()

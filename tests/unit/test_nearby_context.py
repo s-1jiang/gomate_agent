@@ -1,6 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 
-from app.workflows.nearby import resume_recommendation
+from app.workflows.nearby import compact_pair, resume_recommendation
 
 
 def context():
@@ -48,3 +50,11 @@ def test_campus_selection_resumes_with_the_same_tasks_and_observed_area(text):
 )
 def test_new_questions_and_unknown_choices_are_not_overridden_by_old_recommendations(text):
     assert resume_recommendation(text, context()) is None
+
+
+def test_ranked_supervisor_recommendations_are_not_replaced_with_a_distance_only_choice():
+    preferred = SimpleNamespace(agent="dining", name="更适合看书的选择")
+    nearest = SimpleNamespace(agent="dining", name="距离更近的另一家")
+    park = SimpleNamespace(agent="activity", name="公园")
+    assert compact_pair([preferred, nearest, park]) == [preferred, park]
+    assert compact_pair([park, preferred, nearest], first_agent="activity") == [park, preferred]

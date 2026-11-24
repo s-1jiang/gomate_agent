@@ -22,6 +22,7 @@ class Assignment(StrictModel):
 class NearbyContext(StrictModel):
     anchor_name: str
     tasks: list[Assignment] = Field(min_length=1, max_length=2)
+    destination: Place | None = None
 
 
 class SupervisorDecision(StrictModel):
@@ -31,6 +32,7 @@ class SupervisorDecision(StrictModel):
     tasks: list[Assignment] = Field(default_factory=list, max_length=2)
     trip: TripRequest | None = None
     anchor_name: str = Field(default="", max_length=80)
+    area_limit: int | None = Field(default=None, ge=1, le=2)
 
     @model_validator(mode="after")
     def check_decision(self):
@@ -42,8 +44,6 @@ class SupervisorDecision(StrictModel):
             raise ValueError("Itinerary requires a time window")
         if self.kind != "plan" and self.trip is not None:
             raise ValueError("Only planning accepts a trip")
-        if self.kind == "nearby" and not self.anchor_name:
-            raise ValueError("Nearby recommendations require a known anchor")
         return self
 
 

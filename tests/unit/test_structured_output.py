@@ -2,10 +2,10 @@ import asyncio
 
 import pytest
 
-from app.agents.map_specialist import structured_complete
+from app.agents.map_specialist import structured_complete, structured_reply
 from app.core.errors import AppError
 from app.integrations.contracts import ChatMessage
-from app.schemas.maps import SearchArguments
+from app.schemas.maps import SearchArguments, SupervisorDecision
 from app.tools.budget import RunBudget
 
 
@@ -99,3 +99,22 @@ def test_empty_recovery_cannot_reset_the_run_budget():
             )
         )
     assert error.value.code == "BUDGET_EXCEEDED" and model.calls == 1
+
+
+def test_nearby_can_discover_a_destination_before_it_has_a_search_center():
+    decision = structured_reply(
+        '{"kind":"nearby","city":"大连","anchor_name":"","tasks":'
+        '[{"agent":"dining","keyword":"咖啡馆","instruction":"喝咖啡看书"}]}',
+        SupervisorDecision,
+    )
+    assert decision.kind == "nearby" and decision.anchor_name == ""
+
+
+def test_schema_failure_diagnostics_exclude_values_and_unrecognized_field_names(caplog):
+    with pytest.raises(AppError):
+        structured_reply(
+            '{"keyword":123,"private-secret-field":"private-secret-value"}', SearchArguments
+        )
+    assert "schema=SearchArguments" in caplog.text
+    assert '"type": "missing"' in caplog.text and '"field": ["city"]' in caplog.text
+    assert "private-secret" not in caplog.text

@@ -15,6 +15,12 @@ class Scenario:
     reviews: list = field(default_factory=list)
     revise_first: bool = False
     route_missing: bool = False
+    anchorless: bool = False
+    single_destination: bool = False
+    no_city: bool = False
+    secondary_unavailable: bool = False
+    area_limit: int = 2
+    reverse_order: bool = False
 
 
 def poi(key, name, longitude, latitude=30.2):
@@ -43,6 +49,7 @@ def nearby(client, settings):
             choice = "凌水校区" in body["messages"][-1]["content"]
             answer = {
                 "kind": "nearby",
+                "area_limit": scenario.area_limit,
                 "city": "杭州市",
                 "anchor_name": "示例大学(凌水校区)" if choice else "示例大学",
                 "tasks": [
@@ -50,6 +57,31 @@ def nearby(client, settings):
                     {"agent": "activity", "keyword": "台球", "instruction": "饭后打台球，距离近"},
                 ],
             }
+            if scenario.anchorless:
+                answer.update(
+                    anchor_name="",
+                    city="" if scenario.no_city else "杭州市",
+                    tasks=[
+                        {
+                            "agent": "dining",
+                            "keyword": "咖啡馆",
+                            "instruction": "喝咖啡看书，优先安静的选择",
+                        },
+                        *(
+                            []
+                            if scenario.single_destination
+                            else [
+                                {
+                                    "agent": "activity",
+                                    "keyword": "公园",
+                                    "instruction": "再逛逛咖啡馆周边",
+                                }
+                            ]
+                        ),
+                    ],
+                )
+                if scenario.reverse_order:
+                    answer["tasks"].reverse()
         elif "只负责自己的任务" in system:
             task = json.loads(body["messages"][-1]["content"])
             answer = {"city": task["city"], "keyword": task["assignment"]["keyword"], "limit": 5}
@@ -85,7 +117,13 @@ def nearby(client, settings):
             }
         )
         if request.url.path == "/v5/place/text":
-            if "凌水校区" in params["keywords"]:
+            if scenario.anchorless:
+                rows = (
+                    [poi("PARK", "示例公园", 120.1)]
+                    if params["keywords"] == "公园"
+                    else [poi("CAFE", "示例书咖", 120.1)]
+                )
+            elif "凌水校区" in params["keywords"]:
                 rows = [
                     poi("L", "示例大学(凌水校区)", 120.1),
                     poi("LC", "示例大学(凌水校区技术中心)", 120.101),
@@ -99,6 +137,8 @@ def nearby(client, settings):
                 ]
             return httpx.Response(200, json={"status": "1", "pois": rows})
         if request.url.path == "/v5/place/around":
+            if scenario.secondary_unavailable:
+                return httpx.Response(503)
             assert params["radius"] == "2000" and params["city_limit"] == "true"
             longitude = float(params["location"].split(",")[0])
             area = "L" if longitude == 120.1 else "Y"
@@ -209,6 +249,32 @@ def test_optional_connection_failure_keeps_reviewed_recommendations(client, logi
     result = message["map_result"]
     assert result["status"] == "approved" and len(result["places"]) == 2
     assert result["recommendation_groups"][0]["route"] is None
+
+
+def test_supervisor_can_choose_a_single_area_instead_of_a_fixed_two_area_flow(
+    client, login, nearby
+):
+    nearby.area_limit = 1
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "示例大学附近吃饭打台球", "one-area"
+    )
+    assert len(message["map_result"]["recommendation_groups"]) == 1
+    assert len(nearby.reviews) == 1
+
+
+def test_supervisor_task_order_controls_the_primary_destination_and_connection(
+    client, login, nearby
+):
+    nearby.anchorless, nearby.reverse_order = True, True
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "先逛公园，再去咖啡馆", "park-first"
+    )
+    result = message["map_result"]
+    assert [place["poi_id"] for place in result["places"]] == ["PARK", "L咖啡馆"]
+    route = result["recommendation_groups"][0]["route"]
+    assert (route["origin_poi_id"], route["destination_poi_id"]) == ("PARK", "L咖啡馆")
     assert "请补充" not in message["content"]
 
 
@@ -255,3 +321,65 @@ def test_old_clarification_conversation_accepts_campus_choice_without_asking_aga
     groups = message["map_result"]["recommendation_groups"]
     assert len(groups) == 1 and groups[0]["area"]["poi_id"] == "L"
     assert "请补充" not in message["content"]
+
+
+def test_cafe_then_surroundings_discovers_a_real_center_and_keeps_it_selected(
+    client, login, nearby
+):
+    nearby.anchorless = True
+    headers = login()
+    path = conversation(client, headers)
+    run, message = send(
+        client, headers, path, "找一家安静的咖啡馆，喝咖啡、看书，再逛逛周边。", "cafe"
+    )
+    result = message["map_result"]
+    assert result["status"] == "approved"
+    assert [place["poi_id"] for place in result["places"]] == ["CAFE", "L公园"]
+    assert result["recommendation_groups"][0]["area"]["poi_id"] == "CAFE"
+    assert result["recommendation_context"]["destination"]["poi_id"] == "CAFE"
+    assert nearby.reviews[0]["search_area"] is None and nearby.reviews[0]["review_goal"]
+    assert nearby.reviews[1]["search_area"]["poi_id"] == "CAFE"
+    assert run["llm_calls"] == 5
+    assert "〔地图来源未核实〕" not in message["content"]
+    _, followup = send(client, headers, path, "第一个", "keep-cafe")
+    assert followup["map_result"]["recommendation_groups"][0]["area"]["poi_id"] == "CAFE"
+    assert followup["map_result"]["places"][0]["poi_id"] == "CAFE"
+    assert len([search for search in nearby.searches if search["path"].endswith("text")]) == 1
+
+
+def test_default_city_is_used_for_destination_discovery(client, login, settings, nearby):
+    nearby.anchorless, nearby.no_city = True, True
+    settings.default_city = "杭州市"
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "找咖啡馆然后逛周边", "default-city"
+    )
+    assert message["map_result"]["city"] == "杭州市"
+    assert message["map_result"]["places"][0]["poi_id"] == "CAFE"
+
+
+def test_no_location_returns_one_clear_question_without_schema_failure(client, login, nearby):
+    nearby.anchorless, nearby.no_city = True, True
+    headers = login()
+    run, message = send(
+        client, headers, conversation(client, headers), "找咖啡馆然后逛周边", "no-city"
+    )
+    assert message["map_result"]["status"] == "needs_clarification"
+    assert "城市" in message["content"] and not nearby.searches
+    assert run["llm_calls"] == 1
+
+
+@pytest.mark.parametrize("single", [True, False])
+def test_verified_cafe_remains_usable_without_a_secondary_destination(
+    client, login, nearby, single
+):
+    nearby.anchorless, nearby.single_destination, nearby.secondary_unavailable = True, single, True
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "找咖啡馆看书", "partial-cafe"
+    )
+    result = message["map_result"]
+    assert result["status"] == "approved" and [place["poi_id"] for place in result["places"]] == [
+        "CAFE"
+    ]
+    assert result["recommendation_groups"][0]["route"] is None
