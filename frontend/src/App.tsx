@@ -876,9 +876,10 @@ export default function App() {
 }
 
 function RunStatus({ run }: { run: Run }) {
+  if (run.status === "succeeded") return null;
   const active = isActiveRun(run);
   const scaffold = run.error_code === "WORKFLOW_NOT_IMPLEMENTED";
-  const saved = scaffold || run.status === "succeeded";
+  const saved = scaffold;
   let title = "处理未完成";
   let text = run.error_message || "消息已保存，可重新发送问题。";
   if (active) {
@@ -892,9 +893,6 @@ function RunStatus({ run }: { run: Run }) {
   else if (run.status === "waiting_user") {
     title = "请补充信息";
     text = "请补充出发时间、地点或预算。";
-  } else if (run.status === "succeeded") {
-    title = "回复已完成";
-    text = "对话已保存。";
   }
   return (
     <div

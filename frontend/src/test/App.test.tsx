@@ -334,11 +334,12 @@ describe("GoMate workspace", () => {
       "下班后想去散步",
     );
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("回复已完成")).toBeInTheDocument();
     expect(screen.getByText("下班后想去散步")).toBeInTheDocument();
     expect(
       await screen.findByText("可以先从附近的公园开始。"),
     ).toBeInTheDocument();
+    expect(screen.queryByText("回复已完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("对话已保存。")).not.toBeInTheDocument();
     expect(screen.getByText("未检索到相关资料，本次回复由模型生成。")).toBeInTheDocument();
     expect(screen.queryByLabelText("检索来源")).not.toBeInTheDocument();
     expect(
@@ -371,7 +372,7 @@ describe("GoMate workspace", () => {
       expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled(),
     );
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    await screen.findByText("回复已完成");
+    await screen.findByText("可以先从附近的公园开始。");
     expect(sendBodies).toHaveLength(2);
     expect(sendBodies[0].client_message_id).toBe(
       sendBodies[1].client_message_id,
