@@ -310,7 +310,8 @@ class RunRepository:
     def history(self, run: dict, limit: int) -> list[dict]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT role, content FROM messages WHERE user_id = ? AND session_id = ? "
+                "SELECT role, content, map_result_json FROM messages "
+                "WHERE user_id = ? AND session_id = ? "
                 "AND (created_at, id) <= (SELECT created_at, id FROM messages "
                 "WHERE user_id = ? AND session_id = ? AND id = ?) "
                 "ORDER BY created_at DESC, id DESC LIMIT ?",
@@ -323,7 +324,13 @@ class RunRepository:
                     limit,
                 ),
             ).fetchall()
-        return [dict(row) for row in reversed(rows)]
+        history = []
+        for row in reversed(rows):
+            item = dict(row)
+            stored_map = item.pop("map_result_json")
+            item["map_result"] = json.loads(stored_map) if stored_map else None
+            history.append(item)
+        return history
 
     def finish(
         self, run_id, fencing_token, content, sources, retrieval_status, counts, map_result=None

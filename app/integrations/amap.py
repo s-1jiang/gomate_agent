@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.planning.places import air_distance
 from app.schemas.itinerary import RouteObservation
 from app.schemas.maps import SearchArguments
 from app.schemas.planning import Coordinates, Place
@@ -36,11 +37,32 @@ class AMapClient:
             budget.remaining()
             self.next_request_at = time.monotonic() + self.settings.amap_min_interval_seconds
 
-    async def search_places(self, *, keyword: str, city: str, limit: int, budget: RunBudget):
+    async def search_places(
+        self, *, keyword: str, city: str, limit: int, budget: RunBudget, center=None
+    ):
         args = SearchArguments(keyword=keyword, city=city, limit=limit)
         key = self.settings.amap_web_service_key.get_secret_value()
         if not key:
             raise AppError("MAP_NOT_CONFIGURED", "未配置高德 Web 服务 Key", 503)
+        params = {
+            "key": key,
+            "keywords": args.keyword,
+            "region": args.city,
+            "city_limit": "true",
+            "page_size": args.limit,
+            "page_num": 1,
+            "output": "json",
+        }
+        if center is not None:
+            if center.location.coordinate_system != "GCJ02":
+                raise AppError("INVALID_MAP_ARGUMENT", "周边搜索坐标系无效", 400)
+            params.update(
+                {
+                    "location": f"{center.location.longitude:.6f},{center.location.latitude:.6f}",
+                    "radius": 2000,
+                    "sortrule": "distance",
+                }
+            )
         await budget.reserve("external")
         await self.pace(budget)
         timeout = min(self.settings.map_timeout_seconds, budget.remaining())
@@ -54,16 +76,8 @@ class AMapClient:
                 ) as client,
             ):
                 response = await client.get(
-                    "https://restapi.amap.com/v5/place/text",
-                    params={
-                        "key": key,
-                        "keywords": args.keyword,
-                        "region": args.city,
-                        "city_limit": "true",
-                        "page_size": args.limit,
-                        "page_num": 1,
-                        "output": "json",
-                    },
+                    "https://restapi.amap.com/v5/place/" + ("around" if center else "text"),
+                    params=params,
                 )
                 if response.status_code == 429:
                     raise AppError("MAP_RATE_LIMITED", "高德请求限流，请稍后重试", 503)
@@ -84,7 +98,7 @@ class AMapClient:
                 pois = payload.get("pois")
                 if not isinstance(pois, list):
                     raise ValueError("Missing POI list")
-                places, seen = [], set()
+                places, seen, valid_locations = [], set(), 0
                 fetched = datetime.now(UTC)
                 for item in pois[: args.limit]:
                     if not isinstance(item, dict):
@@ -99,6 +113,9 @@ class AMapClient:
                             longitude=longitude, latitude=latitude, coordinate_system="GCJ02"
                         )
                     except (ValueError, ValidationError):
+                        continue
+                    valid_locations += 1
+                    if center is not None and air_distance(center.location, coordinates) > 2000:
                         continue
                     seen.add(poi_id)
                     places.append(
@@ -115,9 +132,11 @@ class AMapClient:
                             category=text_value(item.get("type"))[:200],
                         )
                     )
-                if pois and not places:
+                if pois and not valid_locations:
                     raise AppError("INVALID_MAP_OUTPUT", "高德结果缺少可用的地点或坐标", 502)
                 budget.remaining()
+                if center is not None:
+                    places.sort(key=lambda place: air_distance(center.location, place.location))
                 return places
         except (TimeoutError, httpx.TimeoutException) as exc:
             raise AppError("MAP_TIMEOUT", "高德地点查询超时", 504) from exc

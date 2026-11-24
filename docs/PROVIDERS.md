@@ -50,7 +50,9 @@ DeepSeek 理解偏好、提取条件、选择工具、解释结果；地图服�
 
 第一版聚焦一个城市和“步行 + 公交”，驾车作为后续扩展。天气超出供应商可用日期范围时明确未知。天气与营业时间不能用模型补造。
 
-`app/integrations/amap.py` 已实现 POI 2.0 城市关键词搜索及路径规划2.0的步行/驾车/公交查询。下属 Agent 通过 `MapToolGateway` 调用，Supervisor 本身没有地图工具权限。审查只选择已观测候选，不能生成新的 POI。Tavily 作为可选资料源，配置和字段见 [同城行程](ITINERARY.md)；周边、天气及跨城暂未实现。
+`app/integrations/amap.py` 已实现 POI 2.0 城市关键词搜索、以已确认区域为中心的 2000 米周边搜索，以及路径规划2.0的步行/驾车/公交查询。下属 Agent 通过 `MapToolGateway` 调用，Supervisor 本身没有地图工具权限。审查只选择已观测候选，不能生成新的 POI。Tavily 作为可选资料源，配置和字段见 [同城行程](ITINERARY.md)；GPS、自选周边半径、天气及跨城暂未实现。
+
+周边搜索使用现有 Web 服务 Key，接口和参数依据 [高德 POI 2.0 周边搜索](https://lbs.amap.com/api/webservice/guide/api-advanced/newpoisearch)。校区推荐、后续选项接续与限制见 [地图搜索](MAP_SEARCH.md)。
 
 路线适配器区分无路线、权限、配额、参数、返回格式和临时服务失败，分类依据 [高德错误码](https://lbs.amap.com/api/webservice/guide/tools/info)。规划层在公交明确无路线时允许受限的真实短途步行衔接；不可行路段交回行程 Agent 修改，服务故障保留诊断码，不误报为用户位置不明确。
 

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.schemas.itinerary import Itinerary, TripRequest
+from app.schemas.itinerary import Itinerary, RouteObservation, TripRequest
 from app.schemas.planning import Place
 
 Specialist = Literal["places", "activity", "dining"]
@@ -19,23 +19,31 @@ class Assignment(StrictModel):
     instruction: str = Field(min_length=1, max_length=500)
 
 
+class NearbyContext(StrictModel):
+    anchor_name: str
+    tasks: list[Assignment] = Field(min_length=1, max_length=2)
+
+
 class SupervisorDecision(StrictModel):
-    kind: Literal["answer", "clarify", "search", "plan"]
+    kind: Literal["answer", "clarify", "search", "plan", "nearby"]
     answer: str = Field(default="", max_length=16000)
     city: str = Field(default="", max_length=80)
     tasks: list[Assignment] = Field(default_factory=list, max_length=2)
     trip: TripRequest | None = None
+    anchor_name: str = Field(default="", max_length=80)
 
     @model_validator(mode="after")
     def check_decision(self):
-        if self.kind in {"search", "plan"} and not self.tasks:
+        if self.kind in {"search", "plan", "nearby"} and not self.tasks:
             raise ValueError("Search requires a delegated task")
-        if self.kind not in {"search", "plan"} and (not self.answer or self.tasks):
+        if self.kind not in {"search", "plan", "nearby"} and (not self.answer or self.tasks):
             raise ValueError("Answers require text and cannot contain tasks")
         if self.kind == "plan" and self.trip is None:
             raise ValueError("Itinerary requires a time window")
         if self.kind != "plan" and self.trip is not None:
             raise ValueError("Only planning accepts a trip")
+        if self.kind == "nearby" and not self.anchor_name:
+            raise ValueError("Nearby recommendations require a known anchor")
         return self
 
 
@@ -97,6 +105,13 @@ class MapPlace(Place):
     agent: Specialist
 
 
+class RecommendationGroup(BaseModel):
+    area: Place
+    answer: str
+    place_ids: list[str]
+    route: RouteObservation | None = None
+
+
 class MapSearchResult(BaseModel):
     status: Literal["approved", "no_results", "revision_limit", "needs_clarification"]
     city: str
@@ -105,3 +120,5 @@ class MapSearchResult(BaseModel):
     events: list[WorkflowEvent] = Field(default_factory=list)
     searched_at: datetime
     itinerary: Itinerary | None = None
+    recommendation_groups: list[RecommendationGroup] = Field(default_factory=list, max_length=2)
+    recommendation_context: NearbyContext | None = None

@@ -49,6 +49,13 @@ export interface MapSearchResult {
   review_rounds: number;
   searched_at: string;
   itinerary?: Itinerary | null;
+  recommendation_groups?: RecommendationGroup[];
+}
+export interface RecommendationGroup {
+  area: Omit<MapPlace, "label" | "task_id" | "agent">;
+  answer: string;
+  place_ids: string[];
+  route: Omit<ScheduledLeg, "label" | "origin_name" | "destination_name" | "start_at" | "end_at" | "duration_minutes" | "buffer_minutes"> | null;
 }
 export interface ActivityDetail { text: string; evidence_ids: string[]; }
 export interface ScheduledStop {

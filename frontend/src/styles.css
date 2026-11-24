@@ -118,6 +118,9 @@ svg {
 .itinerary-assumptions { padding: 12px 16px; border-radius: 10px; background: #f7f8f1; font-size: 0.8125rem; margin: 16px 0; }
 .itinerary-assumptions ul, .itinerary-notes ul { padding-left: 19px; margin: 7px 0 0; }
 .itinerary-day { margin-top: 26px; }
+.nearby-places { list-style: none; padding: 0; }
+.nearby-places a { font-size: 0.8rem; color: #126957; }
+.nearby-places .itinerary-stop p { margin: 6px 0; font-size: 0.85rem; }
 .itinerary-day h3, .web-evidence h3 { font-size: 1rem; margin-bottom: 5px; color: #315540; }
 .itinerary-day h3 span { margin-left: 12px; font-weight: 400; font-size: 0.8rem; color: #6a7d70; }
 .message .day-overview, .message .day-total { font-size: 0.8rem; color: #637a6a; margin-bottom: 18px; }

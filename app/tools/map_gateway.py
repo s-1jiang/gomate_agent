@@ -8,10 +8,11 @@ from app.tools.context import ToolContext
 
 
 class MapToolGateway:
-    def __init__(self, provider, *, web_provider=None, max_parallel: int = 4):
+    def __init__(self, provider, *, web_provider=None, max_parallel: int = 4, search_center=None):
         self.provider = provider
         self.web_provider = web_provider
         self.semaphore = asyncio.Semaphore(max_parallel)
+        self.search_center = search_center
 
     @staticmethod
     def authorize(context, tool, scope):
@@ -48,4 +49,7 @@ class MapToolGateway:
             raise AppError("TOOL_FORBIDDEN", "缺少地图搜索权限", 403)
         async with self.semaphore:
             budget.remaining()
-            return await self.provider.search_places(**arguments.model_dump(), budget=budget)
+            kwargs = {"center": self.search_center} if self.search_center is not None else {}
+            return await self.provider.search_places(
+                **arguments.model_dump(), budget=budget, **kwargs
+            )

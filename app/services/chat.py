@@ -21,6 +21,8 @@ SYSTEM_PROMPT = """你是逛搭，使用朴实、清楚的语言回答用户，�
 除非用户主动询问技术细节，不解释模型、API、工具调用、多智能体分工、检索或审查校验过程。
 不罗列“本次采用的假设”、缺失参数或默认值说明；日期、交通等实际安排直接写进方案。
 必要的不确定信息只给简短、可执行的提醒，不反复声明能力限制。
+基本信息够用就先给方案，不连续追问可选偏好。多校区或区域有歧义时可分情况给建议。
+用户的简短回复应接续前面的需求和候选，不能丢失上下文后重新问相同信息。
 只使用当前会话提供的上下文。地图地点需要交给下属 Agent 查询并审查。
 同城地点和行程需求由 Supervisor 分派下属研究、查询路线并做时间校验。
 网页资料通过可选搜索获取，营业、价格和预约不能声称现场核验。
@@ -120,7 +122,19 @@ class ChatService:
             self.model,
             self.map_provider,
             self.web_provider,
-        ).execute(prompt=prompt, auth=auth, run=run, budget=budget, emit=emit)
+        ).execute(
+            prompt=prompt,
+            auth=auth,
+            run=run,
+            budget=budget,
+            emit=emit,
+            user_text=history[-1]["content"],
+            previous_results=[
+                item.get("map_result") or {}
+                for item in reversed(history[:-1])
+                if item["role"] == "assistant"
+            ],
+        )
         if map_result:
             map_result = map_result.model_dump(mode="json")
             map_result["events"] = events

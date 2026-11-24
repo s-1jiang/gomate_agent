@@ -54,6 +54,7 @@ class MapTask:
     city: str
     feedback: str = ""
     previous_result: dict | None = None
+    fixed_keyword: bool = False
 
 
 class MapSpecialist:
@@ -71,6 +72,8 @@ class MapSpecialist:
                     '{"keyword":"不超过80字符的单个关键词","city":"指定城市","limit":5}。'
                     "keyword 使用简短地点名或地点类别，如西湖、浙江省博物馆、西湖餐厅。"
                     "不要把人数、预算、交通方式、游玩理由拼进地点关键词。"
+                    "如果任务指明以已确认地点为中心做周边搜索，keyword 只写类别如餐厅、台球，"
+                    "不要再加学校/校区名或‘附近’等限定，中心与半径由程序固定。"
                     "城市必须保持任务城市不变。不得编造地点、坐标、营业或价格，不输出推理过程。"
                 ),
             ),
@@ -89,7 +92,11 @@ class MapSpecialist:
                 ),
             ),
         ]
-        args = await structured_complete(self.model, prompt, budget, SearchArguments)
+        args = (
+            SearchArguments(keyword=task.assignment.keyword, city=task.city)
+            if task.fixed_keyword
+            else await structured_complete(self.model, prompt, budget, SearchArguments)
+        )
         if args.city != task.city:
             raise AppError("AGENT_SCOPE_CHANGED", "子 Agent 不能修改任务城市", 502)
         places = await self.gateway.search(context, args, budget)
