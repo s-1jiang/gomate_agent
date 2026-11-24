@@ -48,7 +48,7 @@ def map_scenario(client, settings):
         scenario.model_calls.append(body)
         assert body["response_format"] == {"type": "json_object"}
         system = body["messages"][0]["content"]
-        if "可使用三种格式" in system:
+        if "搜索实际地点" in system:
             answer = {"kind": "search", "city": scenario.city, "tasks": scenario.tasks}
         elif "只负责自己的任务" in system:
             task = json.loads(body["messages"][-1]["content"])

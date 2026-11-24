@@ -22,7 +22,7 @@ def main():
         body = json.loads(request.content)
         calls.append(body)
         system = body["messages"][0]["content"]
-        if "可使用三种格式" in system:
+        if "搜索实际地点" in system:
             value = {
                 "kind": "search",
                 "city": "杭州市",

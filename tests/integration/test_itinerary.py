@@ -59,7 +59,7 @@ def itinerary_scenario(client, settings):
         system = body["messages"][0]["content"]
         data = body["messages"][-1]["content"]
         scenario.calls.append(body)
-        if "可使用三种格式" in system:
+        if "搜索实际地点" in system:
             answer = {
                 "kind": "plan",
                 "city": "杭州市",

@@ -21,6 +21,10 @@ class Scenario:
     secondary_unavailable: bool = False
     area_limit: int = 2
     reverse_order: bool = False
+    many_candidates: bool = False
+    alternatives: bool = False
+    requested_count: int | None = None
+    three_campuses: bool = False
 
 
 def poi(key, name, longitude, latitude=30.2):
@@ -45,11 +49,15 @@ def nearby(client, settings):
         body = json.loads(request.content)
         scenario.calls.append(body)
         system = body["messages"][0]["content"]
-        if "可使用三种格式" in system:
+        if "搜索实际地点" in system:
             choice = "凌水校区" in body["messages"][-1]["content"]
+            more = "多推荐" in body["messages"][-1]["content"]
             answer = {
                 "kind": "nearby",
                 "area_limit": scenario.area_limit,
+                "recommendation_count": scenario.requested_count,
+                "nearby_mode": "alternatives" if scenario.alternatives or more else "combine",
+                "more_options": more,
                 "city": "杭州市",
                 "anchor_name": "示例大学(凌水校区)" if choice else "示例大学",
                 "tasks": [
@@ -82,9 +90,36 @@ def nearby(client, settings):
                 )
                 if scenario.reverse_order:
                     answer["tasks"].reverse()
+            if more or scenario.alternatives:
+                answer.update(
+                    city="" if more else "杭州市",
+                    anchor_name="" if scenario.anchorless else "示例大学(凌水校区)",
+                    tasks=[
+                        {
+                            "agent": "dining",
+                            "keyword": "咖啡馆",
+                            "instruction": "保持安静、适合看书的偏好，多给可比较的店铺",
+                        }
+                    ],
+                )
+        elif "选择推荐区域" in system:
+            data = json.loads(body["messages"][-1]["content"])
+            answer = {
+                "area_ids": [area["poi_id"] for area in data["areas"]][
+                    : data.get("area_count_hint") or len(data["areas"])
+                ]
+            }
         elif "只负责自己的任务" in system:
             task = json.loads(body["messages"][-1]["content"])
-            answer = {"city": task["city"], "keyword": task["assignment"]["keyword"], "limit": 5}
+            goal = task.get("recommendation_request") or {}
+            limit = (goal.get("requested_count") or 5) + (
+                len(goal.get("previous_places", [])) if goal.get("more_options") else 0
+            )
+            answer = {
+                "city": task["city"],
+                "keyword": task["assignment"]["keyword"],
+                "limit": limit,
+            }
         else:
             data = json.loads(body["messages"][-1]["content"])
             scenario.reviews.append(data)
@@ -97,10 +132,23 @@ def nearby(client, settings):
                     ],
                 }
             else:
-                chosen = [
-                    next(p for p in data["candidates"] if p["task_id"] == task["task_id"])
-                    for task in data["tasks"]
-                ]
+                goal = data.get("recommendation_request") or {}
+                if goal.get("mode") == "alternatives" or (
+                    scenario.many_candidates and "先选择符合用户目标" in data.get("review_goal", "")
+                ):
+                    shown = (
+                        {place["poi_id"] for place in goal.get("previous_places", [])}
+                        if goal.get("more_options")
+                        else set()
+                    )
+                    chosen = [
+                        place for place in data["candidates"] if place["poi_id"] not in shown
+                    ][: goal.get("requested_count") or len(data["candidates"])]
+                else:
+                    chosen = [
+                        next(p for p in data["candidates"] if p["task_id"] == task["task_id"])
+                        for task in data["tasks"]
+                    ]
                 answer = {
                     "decision": "approve",
                     "answer": "先吃饭，再去附近打台球。",
@@ -117,7 +165,12 @@ def nearby(client, settings):
             }
         )
         if request.url.path == "/v5/place/text":
-            if scenario.anchorless:
+            if scenario.many_candidates and params["keywords"] == "咖啡馆":
+                rows = [
+                    poi(f"CAFE{i}", f"示例书咖{i}", 120.1 + i * 0.0001)
+                    for i in range(int(params["page_size"]))
+                ]
+            elif scenario.anchorless:
                 rows = (
                     [poi("PARK", "示例公园", 120.1)]
                     if params["keywords"] == "公园"
@@ -135,18 +188,25 @@ def nearby(client, settings):
                     poi("MED", "示例大学医学部", 120.12),
                     poi("Y", "示例大学一二九校区", 120.2),
                 ]
+                if scenario.three_campuses:
+                    rows.append(poi("Z", "示例大学第三校区", 120.3))
             return httpx.Response(200, json={"status": "1", "pois": rows})
         if request.url.path == "/v5/place/around":
             if scenario.secondary_unavailable:
                 return httpx.Response(503)
             assert params["radius"] == "2000" and params["city_limit"] == "true"
             longitude = float(params["location"].split(",")[0])
-            area = "L" if longitude == 120.1 else "Y"
+            area = "L" if longitude < 120.15 else "Y" if longitude < 120.25 else "Z"
             category = params["keywords"]
             rows = [
                 poi(area + category, area + category, longitude + 0.001),
                 poi("FAR", "远处的无关商家", 125.1),
             ]
+            if scenario.many_candidates and category == "咖啡馆":
+                rows = [
+                    poi(f"{area}CAFE{i}", f"{area}周边书咖{i}", longitude + i * 0.0001)
+                    for i in range(int(params["page_size"]))
+                ]
             return httpx.Response(200, json={"status": "1", "pois": rows})
         assert request.url.path == "/v5/direction/walking"
         return httpx.Response(
@@ -207,7 +267,7 @@ def test_ambiguous_university_returns_real_recommendations_by_campus(client, log
     assert "请补充" not in message["content"] and "〔地图来源未核实〕" not in message["content"]
     assert "远处的无关商家" not in json.dumps(result, ensure_ascii=False)
     assert len(nearby.reviews) == 2 and all(review["search_area"] for review in nearby.reviews)
-    assert run["llm_calls"] == 7
+    assert run["llm_calls"] == 8
     assert all(row["path"] != "/v5/place/text" for row in nearby.searches[1:])
 
 
@@ -220,7 +280,7 @@ def test_short_campus_reply_reuses_original_request_and_does_not_ask_again(clien
     assert len(groups) == 1 and groups[0]["area"]["poi_id"] == "L"
     assert "请补充" not in message["content"]
     route_prompts = [
-        call for call in nearby.calls if "可使用三种格式" in call["messages"][0]["content"]
+        call for call in nearby.calls if "搜索实际地点" in call["messages"][0]["content"]
     ]
     assert len(route_prompts) == 1  # A stored campus selection cannot be rerouted city-wide.
     assert "示例大学附近吃饭，吃完打台球" in json.dumps(route_prompts[-1], ensure_ascii=False)
@@ -248,7 +308,62 @@ def test_optional_connection_failure_keeps_reviewed_recommendations(client, logi
     )
     result = message["map_result"]
     assert result["status"] == "approved" and len(result["places"]) == 2
+    assert all(group["route"] is None for group in result["recommendation_groups"])
+
+
+def test_more_shops_uses_same_session_context_and_keeps_the_full_model_selection(
+    client, login, nearby
+):
+    nearby.anchorless, nearby.many_candidates = True, True
+    headers = login()
+    path = conversation(client, headers)
+    _, first = send(client, headers, path, "找一家安静的咖啡馆，喝咖啡看书，再逛逛周边", "first")
+    first_ids = {place["poi_id"] for place in first["map_result"]["places"]}
+    nearby.requested_count = 6
+    _, second = send(client, headers, path, "我需要多推荐几家", "more")
+    result = second["map_result"]
+    assert result["status"] == "approved" and len(result["places"]) == 6
+    assert result["city"] == "杭州市"
+    assert first_ids.isdisjoint({place["poi_id"] for place in result["places"]})
+    assert "暂时没找到" not in second["content"]
+    assert nearby.reviews[-1]["recommendation_request"]["requested_count"] == 6
+    assert nearby.reviews[-1]["recommendation_request"]["previous_places"]
+    assert int(nearby.searches[-1]["params"]["page_size"]) > 5
+
+
+def test_twelve_approved_shop_alternatives_are_not_trimmed_to_two_or_ten(client, login, nearby):
+    nearby.alternatives, nearby.many_candidates, nearby.requested_count = True, True, 12
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "凌水校区给我推荐12家咖啡馆作比较", "twelve"
+    )
+    result = message["map_result"]
+    assert len(result["places"]) == 12
+    assert len(result["recommendation_groups"][0]["place_ids"]) == 12
     assert result["recommendation_groups"][0]["route"] is None
+    assert "[M12]" in message["content"]
+
+
+def test_model_can_return_three_area_groups_without_a_two_group_schema_cap(client, login, nearby):
+    nearby.three_campuses, nearby.area_limit = True, 3
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "三个校区分别推荐吃饭和台球", "three"
+    )
+    assert len(message["map_result"]["recommendation_groups"]) == 3
+
+
+def test_model_can_choose_multiple_primary_destinations_for_competing_combinations(
+    client, login, nearby
+):
+    nearby.anchorless, nearby.many_candidates, nearby.requested_count = True, True, 3
+    headers = login()
+    _, message = send(
+        client, headers, conversation(client, headers), "推荐三套咖啡馆加散步的组合", "combinations"
+    )
+    groups = message["map_result"]["recommendation_groups"]
+    assert len(groups) == 3
+    assert {group["area"]["poi_id"] for group in groups} == {"CAFE0", "CAFE1", "CAFE2"}
 
 
 def test_supervisor_can_choose_a_single_area_instead_of_a_fixed_two_area_flow(
@@ -285,7 +400,7 @@ def test_saved_campus_context_is_not_reused_in_another_conversation(client, logi
     second = conversation(client, headers)
     _, message = send(client, headers, second, "凌水校区", "new")
     assert (
-        len([call for call in nearby.calls if "可使用三种格式" in call["messages"][0]["content"]])
+        len([call for call in nearby.calls if "搜索实际地点" in call["messages"][0]["content"]])
         == 2
     )
     assert message["map_result"]["recommendation_groups"][0]["area"]["poi_id"] == "L"
@@ -382,4 +497,7 @@ def test_verified_cafe_remains_usable_without_a_secondary_destination(
     assert result["status"] == "approved" and [place["poi_id"] for place in result["places"]] == [
         "CAFE"
     ]
-    assert result["recommendation_groups"][0]["route"] is None
+    if single:
+        assert not result["recommendation_groups"] and "[M1]" in message["content"]
+    else:
+        assert result["recommendation_groups"][0]["route"] is None

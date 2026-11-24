@@ -88,6 +88,7 @@ class MapTask:
     feedback: str = ""
     previous_result: dict | None = None
     fixed_keyword: bool = False
+    recommendation_request: dict | None = None
 
 
 class MapSpecialist:
@@ -102,7 +103,9 @@ class MapSpecialist:
                     f"你是 {context.agent_name} 地点研究 Agent，只负责自己的任务，"
                     "不能分派其他 Agent。"
                     "根据 Supervisor 的任务和修改反馈制定一次搜索参数。只输出 JSON："
-                    '{"keyword":"不超过80字符的单个关键词","city":"指定城市","limit":5}。'
+                    '{"keyword":"不超过80字符的单个关键词","city":"指定城市","limit":8}。'
+                    "limit 是本次要检索的候选数量，由你根据数量要求和审查需要判断，示例8不是上限。"
+                    "普通推荐可考虑多取一些候选供筛选；用户要求更多或指定数量时相应增加，不能总取5个。"
                     "keyword 使用简短地点名或地点类别，如西湖、浙江省博物馆、西湖餐厅。"
                     "不要把人数、预算、交通方式、游玩理由拼进地点关键词。"
                     "如果任务指明以已确认地点为中心做周边搜索，keyword 只写类别如餐厅、台球，"
@@ -120,13 +123,14 @@ class MapSpecialist:
                         "city": task.city,
                         "revision_feedback": task.feedback,
                         "previous_result": task.previous_result,
+                        "recommendation_request": task.recommendation_request,
                     },
                     ensure_ascii=False,
                 ),
             ),
         ]
         args = (
-            SearchArguments(keyword=task.assignment.keyword, city=task.city)
+            SearchArguments(keyword=task.assignment.keyword, city=task.city, limit=25)
             if task.fixed_keyword
             else await structured_complete(self.model, prompt, budget, SearchArguments)
         )

@@ -47,10 +47,10 @@ def recommendation_areas(name, candidates, city):
     # An institution with several observed campuses can be answered by campus.
     related = [place for place in campuses if query in normalized_name(place.name)]
     if len(related) > 1:
-        return related[:2]
+        return related
     if chosen:
         return [chosen]
     if related:
-        return related[:2]
+        return related
     related = [place for place in candidates if query in normalized_name(place.name)]
-    return related[:2]
+    return related

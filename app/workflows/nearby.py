@@ -1,11 +1,14 @@
+import json
 import logging
 import re
 from datetime import UTC, datetime
 
-from app.agents.map_specialist import MapSpecialist, MapTask
+from app.agents.map_specialist import MapSpecialist, MapTask, structured_complete
 from app.core.errors import AppError
+from app.integrations.contracts import ChatMessage
 from app.planning.places import match_origin, normalized_name, recommendation_areas
 from app.schemas.maps import (
+    AreaSelection,
     Assignment,
     MapPlace,
     MapSearchResult,
@@ -26,6 +29,8 @@ def resume_recommendation(text, previous):
     groups = previous.get("recommendation_groups") or []
     if not state or not groups or len(text) > 80:
         return None
+    if state.get("nearby_mode") == "alternatives":
+        return None  # Let Supervisor interpret selections among individual shop alternatives.
     choice = re.sub(r"^(?:我在|就在|就选|选择|那就|在|选|去)", "", text.strip())
     choice = re.sub(r"(?:附近|这边|就行|即可|吧|呢|。|！|!|？|\?)$", "", choice)
     if not choice:
@@ -50,16 +55,6 @@ def resume_recommendation(text, previous):
     return SupervisorDecision(
         kind="nearby", city=previous["city"], anchor_name=area.name, tasks=state.tasks
     ), area
-
-
-def compact_pair(places, first_agent="dining"):
-    dining = [place for place in places if place.agent == "dining"]
-    activity = [place for place in places if place.agent == "activity"]
-    if dining and activity:
-        # Preserve Supervisor's ranked choices instead of replacing its preference.
-        pair = [dining[0], activity[0]]
-        return pair if first_agent == "dining" else list(reversed(pair))
-    return places[:2]
 
 
 def without_listing(answer, places):
@@ -88,6 +83,7 @@ class NearbyWorkflow:
         emit,
         areas_override=None,
         primary_destination=None,
+        recommendation_request=None,
     ):
         city = decision.city or self.settings.default_city
         if not city:
@@ -111,10 +107,32 @@ class NearbyWorkflow:
         async def event(stage, agent, summary):
             await emit(WorkflowEvent(stage=stage, agent=agent, summary=summary))
 
+        recommendation_request = recommendation_request or {
+            "mode": decision.nearby_mode,
+            "requested_count": decision.recommendation_count,
+            "more_options": decision.more_options,
+        }
+        if (
+            decision.nearby_mode == "alternatives"
+            and not decision.anchor_name
+            and areas_override is None
+        ):
+            return await self.search(
+                decision=decision.model_copy(update={"kind": "search"}),
+                prompt=prompt,
+                auth=auth,
+                run=run,
+                budget=budget,
+                emit=emit,
+                recommendation_request=recommendation_request,
+                review_goal="比较多家同类地点。根据用户数量要求给出所有值得推荐的候选，不生成固定两处的串行行程。",
+            )
+
         gateway = MapToolGateway(
             self.provider, max_parallel=self.settings.max_parallel_tools_per_run
         )
         primary, discovery_answer, discovery_rounds = None, "", 0
+        primary_by_id = {}
         if primary_destination is not None:
             primary = MapPlace(
                 **primary_destination.model_dump(),
@@ -122,6 +140,8 @@ class NearbyWorkflow:
                 task_id="anchor",
                 agent=decision.tasks[0].agent,
             )
+            if decision.nearby_mode == "combine":
+                primary_by_id[primary.poi_id] = primary
         if not decision.anchor_name and areas_override is None:
             await event("dispatch", "supervisor", "先分派专家查找主要目的地，再安排其周边活动")
             first_task = decision.tasks[0]
@@ -132,16 +152,23 @@ class NearbyWorkflow:
                 run=run,
                 budget=budget,
                 emit=emit,
-                review_goal="先选择一处符合用户偏好的主要目的地。这里只审查第一步，后续活动将围绕它继续搜索。",
+                review_goal="先选择符合用户目标的主要目的地。需要比较多个组合时可选多处，数量由你判断；后续分别围绕它们安排活动。",
+                recommendation_request={
+                    **recommendation_request,
+                    "selection_scope": "primary_destination",
+                },
             )
             if discovery.status != "approved" or not discovery.places:
                 return discovery_answer, discovery
-            primary = discovery.places[0]
+            if len(decision.tasks) == 1:
+                discovery.recommendation_context = NearbyContext(
+                    anchor_name="", tasks=decision.tasks, nearby_mode="alternatives"
+                )
+                return discovery_answer, discovery
+            primary_by_id = {place.poi_id: place for place in discovery.places}
             discovery_answer = without_listing(discovery_answer, discovery.places)
-            if len(discovery.places) > 1:
-                discovery_answer = "可以先参考这家。"
             discovery_rounds = discovery.review_rounds
-            areas = [base_place(primary)]
+            areas = [base_place(place) for place in discovery.places]
         elif areas_override is None:
             await event(
                 "dispatch", "supervisor", f"分派给 places Agent：确认 {decision.anchor_name} 的区域"
@@ -164,7 +191,38 @@ class NearbyWorkflow:
             areas = recommendation_areas(decision.anchor_name, candidates, city)
         else:
             areas = areas_override
-        areas = areas[: decision.area_limit or 2]
+        if not primary_by_id and len(areas) > 1:
+            selection = await structured_complete(
+                self.model,
+                [
+                    ChatMessage(
+                        role="system",
+                        content="你是 Supervisor，选择推荐区域。依据用户目标和实际候选选择区域。"
+                        "数量由你判断。"
+                        "一般可考虑1—3个便于比较，这是建议而非上限；用户明确要求和候选差异优先。"
+                        "多推荐店铺不等于增加区域；已指定校区时保留区域。只选提供的主体地点，不编造来源。"
+                        '只输出 JSON：{"area_ids":["原样复制实际候选的poi_id"]}，不输出思考过程。',
+                    ),
+                    ChatMessage(
+                        role="user",
+                        content=json.dumps(
+                            {
+                                "areas": [area.model_dump(mode="json") for area in areas],
+                                "area_count_hint": decision.area_limit,
+                                "recommendation_request": recommendation_request,
+                                "user_context": [message.model_dump() for message in prompt[1:]],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
+                ],
+                budget,
+                AreaSelection,
+            )
+            observed_areas = {area.poi_id: area for area in areas}
+            if not set(selection.area_ids).issubset(observed_areas):
+                raise AppError("INVALID_REVIEW", "区域审查引用了未查询的地点", 502)
+            areas = [observed_areas[poi_id] for poi_id in dict.fromkeys(selection.area_ids)]
         await event("review", "supervisor", f"核对区域候选，保留 {len(areas)} 个区域分别推荐")
         if not areas:
             return "暂时没找到这个区域，可以补充附近的地标。", MapSearchResult(
@@ -177,14 +235,19 @@ class NearbyWorkflow:
             review_rounds=discovery_rounds,
             searched_at=datetime.now(UTC),
             recommendation_context=NearbyContext(
-                anchor_name=primary.name if primary else decision.anchor_name,
+                anchor_name=decision.anchor_name,
                 tasks=decision.tasks,
-                destination=base_place(primary) if primary else None,
+                destination=base_place(next(iter(primary_by_id.values())))
+                if len(primary_by_id) == 1
+                else None,
+                destinations=[base_place(place) for place in primary_by_id.values()],
+                nearby_mode=decision.nearby_mode,
             ),
         )
         labels = {}
-        # Two areas share one budget/deadline and normal Supervisor review/rework.
+        # All model-selected options share the original budget, deadline and review process.
         for area in areas:
+            primary = primary_by_id.get(area.poi_id)
             tasks = [
                 task.model_copy(
                     update={
@@ -209,6 +272,10 @@ class NearbyWorkflow:
                         review_goal="以已确认的主要目的地为中心，只审查后续地点并给出衔接建议。"
                         if primary
                         else "",
+                        recommendation_request={
+                            **recommendation_request,
+                            "selection_scope": "nearby_activities" if primary else "area_options",
+                        },
                     )
                 except AppError as exc:
                     if not primary or not exc.code.startswith(("MAP_", "INVALID_MAP_")):
@@ -253,9 +320,7 @@ class NearbyWorkflow:
             }
             if primary:
                 observed[primary.poi_id] = primary
-            chosen = compact_pair(list(observed.values()), decision.tasks[0].agent)
-            if len(chosen) < len(observed):
-                answer = "这组地点在同一片区域，可以按顺序前往。"
+            chosen = list(observed.values())  # Keep every approved ID and its model-selected order.
             for place in chosen:
                 if place.poi_id not in labels:
                     labels[place.poi_id] = f"M{len(labels) + 1}"
@@ -277,7 +342,7 @@ class NearbyWorkflow:
             group = RecommendationGroup(
                 area=area, answer=answer, place_ids=[place.poi_id for place in chosen]
             )
-            if len(chosen) == 2:
+            if decision.nearby_mode == "combine" and len(chosen) == 2:
                 first, second = chosen
                 await event(
                     "dispatch", "supervisor", "分派给 itinerary Agent：查询餐饮与娱乐地点的步行衔接"

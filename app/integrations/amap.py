@@ -40,6 +40,25 @@ class AMapClient:
     async def search_places(
         self, *, keyword: str, city: str, limit: int, budget: RunBudget, center=None
     ):
+        requested = SearchArguments(keyword=keyword, city=city, limit=limit).limit
+        page_size = min(requested, 25)  # Upstream page capacity, not a display count.
+        places, seen = [], set()
+        # AMap permits at most 200 results for one query; every page uses the same Run budget.
+        for page in range(1, 9):
+            rows, page_count = await self._search_page(
+                keyword=keyword, city=city, limit=page_size, budget=budget, center=center, page=page
+            )
+            fresh = [place for place in rows if place.poi_id not in seen]
+            for place in fresh:
+                seen.add(place.poi_id)
+                places.append(place)
+            if len(places) >= requested or page_count < page_size or not fresh:
+                break
+        return places[:requested]
+
+    async def _search_page(
+        self, *, keyword: str, city: str, limit: int, budget: RunBudget, center=None, page=1
+    ):
         args = SearchArguments(keyword=keyword, city=city, limit=limit)
         key = self.settings.amap_web_service_key.get_secret_value()
         if not key:
@@ -50,7 +69,7 @@ class AMapClient:
             "region": args.city,
             "city_limit": "true",
             "page_size": args.limit,
-            "page_num": 1,
+            "page_num": page,
             "output": "json",
         }
         if center is not None:
@@ -137,7 +156,7 @@ class AMapClient:
                 budget.remaining()
                 if center is not None:
                     places.sort(key=lambda place: air_distance(center.location, place.location))
-                return places
+                return places, len(pois)
         except (TimeoutError, httpx.TimeoutException) as exc:
             raise AppError("MAP_TIMEOUT", "高德地点查询超时", 504) from exc
         except httpx.HTTPError as exc:

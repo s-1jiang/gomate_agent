@@ -32,3 +32,13 @@ it("separates recommendations by campus and preserves map links and observed wal
   expect(screen.queryByText(/请补充|POI|Agent|GCJ/)).not.toBeInTheDocument();
   expect(container.querySelector('script[src*="amap"]')).toBeNull();
 });
+
+it("renders the complete model-selected shop list without a two-place display limit", () => {
+  const result = structuredClone(nearbyFixture);
+  result.places = Array.from({ length: 12 }, (_, index) => place(`M${index + 1}`, `备选咖啡馆${index + 1}`));
+  result.recommendation_groups = [{ ...result.recommendation_groups![0], place_ids: result.places.map((p) => p.poi_id), route: null }];
+  render(<NearbyAnswer result={result} />);
+  expect(screen.getAllByRole("link", { name: "在地图中查看" })).toHaveLength(12);
+  expect(screen.getByText("[M12] 备选咖啡馆12")).toBeVisible();
+  expect(screen.queryByText(/两处间步行/)).not.toBeInTheDocument();
+});

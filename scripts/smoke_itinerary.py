@@ -22,7 +22,7 @@ class ScriptedModel:
         await budget.reserve("llm")
         await budget.reserve("external")
         system = messages[0].content
-        if "可使用三种格式" in system:
+        if "搜索实际地点" in system:
             value = {
                 "kind": "plan",
                 "city": "杭州市",

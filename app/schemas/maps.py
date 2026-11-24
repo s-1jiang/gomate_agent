@@ -23,6 +23,8 @@ class NearbyContext(StrictModel):
     anchor_name: str
     tasks: list[Assignment] = Field(min_length=1, max_length=2)
     destination: Place | None = None
+    destinations: list[Place] = Field(default_factory=list)
+    nearby_mode: Literal["combine", "alternatives"] = "combine"
 
 
 class SupervisorDecision(StrictModel):
@@ -32,7 +34,10 @@ class SupervisorDecision(StrictModel):
     tasks: list[Assignment] = Field(default_factory=list, max_length=2)
     trip: TripRequest | None = None
     anchor_name: str = Field(default="", max_length=80)
-    area_limit: int | None = Field(default=None, ge=1, le=2)
+    area_limit: int | None = Field(default=None, ge=1)
+    recommendation_count: int | None = Field(default=None, ge=1)
+    nearby_mode: Literal["combine", "alternatives"] = "combine"
+    more_options: bool = False
 
     @model_validator(mode="after")
     def check_decision(self):
@@ -50,7 +55,11 @@ class SupervisorDecision(StrictModel):
 class SearchArguments(StrictModel):
     keyword: str = Field(min_length=1, max_length=80)
     city: str = Field(min_length=1, max_length=80)
-    limit: int = Field(default=5, ge=1, le=5)
+    limit: int = Field(default=5, ge=1)
+
+
+class AreaSelection(StrictModel):
+    area_ids: list[str] = Field(min_length=1)
 
 
 class RevisionRequest(StrictModel):
@@ -63,7 +72,7 @@ class SupervisorReview(StrictModel):
     decision: Literal["approve", "revise", "clarify"]
     answer: str = Field(default="", max_length=16000)
     # The supervisor can only select references to provider observations, never author POIs.
-    selected_ids: list[str] = Field(default_factory=list, max_length=10)
+    selected_ids: list[str] = Field(default_factory=list)
     revisions: list[RevisionRequest] = Field(default_factory=list, max_length=2)
 
     @model_validator(mode="after")
@@ -120,5 +129,5 @@ class MapSearchResult(BaseModel):
     events: list[WorkflowEvent] = Field(default_factory=list)
     searched_at: datetime
     itinerary: Itinerary | None = None
-    recommendation_groups: list[RecommendationGroup] = Field(default_factory=list, max_length=2)
+    recommendation_groups: list[RecommendationGroup] = Field(default_factory=list)
     recommendation_context: NearbyContext | None = None
