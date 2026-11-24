@@ -20,30 +20,30 @@ def structured_reply(raw: str, schema):
 
 
 async def structured_complete(model, prompt, budget, schema):
-    raw = await model.complete(prompt, budget, json_mode=True)
-    try:
-        return structured_reply(raw, schema)
-    except AppError as exc:
-        if exc.code != "INVALID_AGENT_OUTPUT":
-            raise
-    # One format correction only. It shares the Run's original counters and deadline.
-    corrected = await model.complete(
-        [
+    messages = list(prompt)
+    for attempt in range(2):
+        raw = None
+        try:
+            raw = await model.complete(messages, budget, json_mode=True)
+            return structured_reply(raw, schema)
+        except AppError as exc:
+            if exc.code not in {"EMPTY_MODEL_OUTPUT", "INVALID_AGENT_OUTPUT"} or attempt == 1:
+                raise
+        # Empty-output recovery and schema correction share ONE extra request, not nested retries.
+        # Model.complete reserves the original Run's counters/deadline again for that request.
+        messages = [
             *prompt,
-            ChatMessage(role="assistant", content=raw),
+            *([ChatMessage(role="assistant", content=raw)] if raw and raw.strip() else []),
             ChatMessage(
                 role="user",
                 content=(
-                    "上一次输出未符合数据结构。请仅修正格式与字段，保持原始需求和已提供的来源。"
-                    "只输出合法 JSON，不输出解释。必须严格符合以下 JSON Schema：\n"
+                    "上一次没有返回可用的 JSON 数据。请直接返回一个完整 JSON 对象，不要只输出空格。"
+                    "保持原始需求和已提供的来源，只修正格式与字段，不输出解释。"
+                    "必须严格符合以下 JSON Schema：\n"
                     + json.dumps(schema.model_json_schema(), ensure_ascii=False)
                 ),
             ),
-        ],
-        budget,
-        json_mode=True,
-    )
-    return structured_reply(corrected, schema)
+        ]
 
 
 @dataclass(frozen=True)

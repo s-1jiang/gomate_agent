@@ -43,7 +43,7 @@ Compose 将密钥传给后端，前端不接收 Tavily Key。适配器固定请�
 高德查询沿用 `AMAP_WEB_SERVICE_KEY`；交互底图仍需 `AMAP_JS_API_KEY` 和仅在服务端使用的 `AMAP_JS_SECURITY_CODE`。
 同一进程的地点/路线请求默认至少相隔1.1秒，避免并行研究和连续算路造成突发请求；可按实际高德账户配额调整 `AMAP_MIN_INTERVAL_SECONDS`。等待仍受原 Run 截止时间控制。
 
-默认显式关闭 DeepSeek 思考模式，避免多阶段结构化调用使用服务端默认高思考而超时；可用 `DEEPSEEK_THINKING=enabled` 自行启用并相应调整时限。输出未满足字段结构时最多补一次格式校正，仍共用原调用预算，不对网络/鉴权失败隐式重试。[DeepSeek 思考模式参数](https://api-docs.deepseek.com/guides/thinking_mode/)
+默认显式关闭 DeepSeek 思考模式，避免多阶段结构化调用使用服务端默认高思考而超时；可用 `DEEPSEEK_THINKING=enabled` 自行启用并相应调整时限。空回答与字段结构不匹配合计最多补一次校正，共用原调用预算，不对网络、鉴权、拒答或超长失败隐式重试。[DeepSeek 思考模式参数](https://api-docs.deepseek.com/guides/thinking_mode/)
 
 ## 验证与范围
 

@@ -8,11 +8,17 @@
 - Base URL：`https://api.deepseek.com`；模型通过 `DEEPSEEK_MODEL` 配置。
 - 骨架默认 `deepseek-flash`，具体业务模型在冻结评测后确定，不把型号写死到各个 Agent。
 - 所有角色共享同一个供应商配置，依靠工具权限、上下文与任务契约分工。
-- 每次实际模型请求先占用 LLM 和 external 预算；不启用隐式重试。
+- 每次实际模型请求先占用 LLM 和 external 预算；网络、鉴权、拒答和输出超长不做隐式重试。JSON 空回复和字段校正共用一次附加调用，继续使用原 Run 的额度及截止时间。
 - 只返回回答内容，不向用户输出供应商 reasoning 字段；错误不回传原始供应商响应。
 - 已接入非流式多轮文字聊天运行器。用户提问时，将当前会话上下文和授权召回片段发送至配置的 DeepSeek `/chat/completions` 接口；不发送其他用户或会话专属资料。
 - 私有文本检索目前在本地使用关键词匹配，不调用外部 Embedding / Rerank。来源标签由服务端真实召回结果生成，详见 [聊天和来源说明](CHAT_AND_RAG.md)。
 - Embedding 和 Rerank 使用独立接口，后续选型并评测，不假定聊天 API 同时提供二者。
+
+### 模型返回内容异常
+
+DeepSeek JSON 模式可能将非 JSON 输出替换成空格，即使 `finish_reason=stop`，`content` 仍可能为空白。[官方 JSON 输出说明](https://api-docs.deepseek.com/guides/json_mode/)
+
+适配器区分空回答（`EMPTY_MODEL_OUTPUT`）、响应包无法解析（`INVALID_PROVIDER_RESPONSE`）、JSON 字段不匹配（`INVALID_AGENT_OUTPUT`）、超长截断、服务繁忙、生成中断和拒答。空回答或字段不匹配最多合计补一次请求，带原始任务和 JSON Schema 提醒；不把 reasoning 字段当最终回答，不把缺失城市编成某座城市。响应异常日志仅记录固定错误码，不记录密钥、提示词、原始响应或推理内容。旧任务保存的统一“返回格式不合法”无法据此还原当时的原始响应。
 
 ## 地图：后端服务与前端展示分别接入
 
