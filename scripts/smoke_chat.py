@@ -34,7 +34,13 @@ def main():
                     "choices": [
                         {
                             "message": {
-                                "content": "The riverside path is suitable for walking. [R1]"
+                                "content": json.dumps(
+                                    {
+                                        "kind": "answer",
+                                        "answer": "The riverside path suits walking. [R1]",
+                                        "tasks": [],
+                                    }
+                                )
                             },
                             "finish_reason": "stop",
                         }

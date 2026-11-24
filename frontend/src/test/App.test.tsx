@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
-import type { Conversation, Message, RetrievalSource, Run } from "../api";
+import type { Conversation, MapSearchResult, Message, RetrievalSource, Run } from "../api";
 
 const USER = {
   id: "user-a",
@@ -42,6 +42,7 @@ function backend({
   replySources = [] as RetrievalSource[],
   runFailure = null as { code: string; message: string } | null,
   cookieSession = false,
+  replyMap = null as MapSearchResult | null,
 } = {}) {
   let signedInCookie = cookieSession;
   let conversations = [...initial];
@@ -53,6 +54,10 @@ function backend({
       calls.push({ path, options });
       const method = options?.method || "GET";
       if (path === "/health/ready") return response({ status: "ok" });
+      if (path === "/api/v1/maps/config") return response({
+        provider: "amap", search_enabled: true, display_enabled: false,
+        js_key: "", security_proxy: "/api/v1/maps/_AMapService", default_city: "",
+      });
       if (path === "/api/v1/me") {
         if (!signedInCookie && !new Headers(options?.headers).has("Authorization"))
           return response({ error: { code: "UNAUTHORIZED", message: "请先登录" } }, 401);
@@ -95,6 +100,7 @@ function backend({
             id: "reply-1", role: "assistant", content: replyText,
             client_message_id: null, created_at: "2026-11-21T00:00:02Z",
             sources: replySources, retrieval_status: replySources.length ? "retrieved" : "no_matches",
+            map_result: replyMap,
           });
         }
         return response({ ...RUN, status: runFailure ? "failed" : "succeeded",
@@ -412,6 +418,29 @@ describe("GoMate workspace", () => {
     expect(first.getByText("公园沿河，适合散步。")).toBeVisible();
     expect(first.getByText(/周末笔记.md · 第 2–4 行 · 版本 1/)).toBeVisible();
     expect(first.getByText("test-content-hash")).toBeVisible();
+  });
+
+  it("submits panel searches through chat and shows reviewed places without losing a typed draft", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const { sendBodies } = backend({ replyText: "找到以下地点。", replyMap: {
+      status: "approved", city: "杭州", review_rounds: 0, events: [], searched_at: RUN.created_at,
+      places: [{ provider: "amap", poi_id: "B001", name: "河边咖啡", city_code: "0571", city: "杭州",
+        district: "西湖区", address: "示例路", category: "咖啡馆", source_ref: "amap:poi:B001",
+        fetched_at: RUN.created_at, label: "M1", task_id: "task-1", agent: "dining",
+        location: { longitude: 120.15, latitude: 30.25, coordinate_system: "GCJ02" } }],
+    } });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("tester");
+    await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "保留的草稿");
+    await user.type(screen.getByLabelText("搜索城市"), "杭州");
+    await user.type(screen.getByLabelText("地点关键词"), "咖啡馆");
+    await user.click(screen.getByRole("button", { name: "搜索地点" }));
+    await screen.findByText("找到以下地点。");
+    const panel = screen.getByRole("complementary", { name: "地点搜索与地图" });
+    expect(within(panel).getByText("[M1] 河边咖啡")).toBeInTheDocument();
+    expect(sendBodies[0].content).toBe("城市：杭州\n请在地图上搜索：咖啡馆");
+    expect(screen.getByRole("textbox", { name: "输入出行需求" })).toHaveValue("保留的草稿");
   });
 
   it("shows provider failures without inventing an assistant answer", async () => {

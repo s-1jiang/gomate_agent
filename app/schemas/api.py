@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.maps import MapSearchResult, WorkflowEvent
+
 
 class InputModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -80,6 +82,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     sources: list[RetrievalSource] = Field(default_factory=list)
     retrieval_status: Literal["no_matches", "retrieved"] | None = None
+    map_result: MapSearchResult | None = None
 
 
 RunStatus = Literal[
@@ -107,3 +110,4 @@ class RunOut(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+    workflow_events: list[WorkflowEvent] = Field(default_factory=list)

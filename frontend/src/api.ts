@@ -16,6 +16,46 @@ export interface Message {
   created_at: string;
   sources?: RetrievalSource[];
   retrieval_status?: "no_matches" | "retrieved" | null;
+  map_result?: MapSearchResult | null;
+}
+export interface WorkflowEvent {
+  stage: "route" | "dispatch" | "search" | "review" | "revise" | "complete" | "clarify" | "limit";
+  agent: "supervisor" | "places" | "activity" | "dining";
+  task_id: string | null;
+  task_version: number | null;
+  summary: string;
+}
+export interface MapPlace {
+  provider: "amap";
+  poi_id: string;
+  name: string;
+  city_code: string;
+  city: string;
+  district: string;
+  address: string;
+  category: string;
+  location: { longitude: number; latitude: number; coordinate_system: "GCJ02" };
+  source_ref: string;
+  fetched_at: string;
+  label: string;
+  task_id: string;
+  agent: "places" | "activity" | "dining";
+}
+export interface MapSearchResult {
+  status: "approved" | "no_results" | "revision_limit" | "needs_clarification";
+  city: string;
+  places: MapPlace[];
+  events: WorkflowEvent[];
+  review_rounds: number;
+  searched_at: string;
+}
+export interface MapConfig {
+  provider: "amap";
+  search_enabled: boolean;
+  display_enabled: boolean;
+  js_key: string;
+  security_proxy: string;
+  default_city: string;
 }
 export interface RetrievalSource {
   label: string;
@@ -74,6 +114,7 @@ export interface Run {
   llm_calls: number;
   created_at: string;
   updated_at: string;
+  workflow_events?: WorkflowEvent[];
 }
 export interface Credentials {
   username: string;
@@ -145,6 +186,9 @@ export class ApiClient {
 
   me(signal?: AbortSignal) {
     return this.request<User>("/me", { signal });
+  }
+  mapConfig(signal?: AbortSignal) {
+    return this.request<MapConfig>("/maps/config", { signal });
   }
   register(body: Credentials) {
     return this.request<User>("/auth/register", {

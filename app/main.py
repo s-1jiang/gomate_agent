@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException
 
 from app import __version__
+from app.api.maps import router as maps_router
 from app.api.router import router
 from app.core.browser_session import SESSION_COOKIE, clear_browser_session
 from app.core.config import Settings
@@ -13,6 +14,7 @@ from app.core.errors import AppError
 from app.db.database import Database
 from app.db.repositories import interrupt_pending_runs
 from app.integrations.deepseek import DeepSeekClient
+from app.integrations.map_style import MapStyleProxy
 from app.observability.http import request_context
 from app.services.chat import ChatService
 
@@ -35,11 +37,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=config.app_name,
         version=__version__,
         lifespan=lifespan,
-        description="GoMate：文字聊天、私有文本知识检索与来源引用。地图规划尚未接入。",
+        description="GoMate：Supervisor 地点搜索、文字聊天和可追溯来源。路线规划尚未接入。",
     )
     application.state.settings = config
     application.state.database = database
     application.state.chat = chat
+    application.state.map_style = MapStyleProxy(config)
     application.middleware("http")(request_context)
 
     def error_response(request: Request, code: str, message: str, status: int, details=None):
@@ -91,6 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "database": "sqlite"}
 
     application.include_router(router)
+    application.include_router(maps_router)
     return application
 
 

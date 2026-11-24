@@ -15,7 +15,9 @@ class DeepSeekClient:
         self.settings = settings
         self.transport = transport
 
-    async def complete(self, messages: list[ChatMessage], budget: RunBudget) -> str:
+    async def complete(
+        self, messages: list[ChatMessage], budget: RunBudget, *, json_mode: bool = False
+    ) -> str:
         key = self.settings.deepseek_api_key.get_secret_value()
         if not key:
             raise AppError("PROVIDER_NOT_CONFIGURED", "未配置 DeepSeek API Key", 503)
@@ -40,6 +42,7 @@ class DeepSeekClient:
                         "messages": [message.model_dump() for message in messages],
                         "stream": False,
                         "max_tokens": self.settings.chat_max_output_tokens,
+                        **({"response_format": {"type": "json_object"}} if json_mode else {}),
                     },
                 )
                 if response.status_code in (401, 403):

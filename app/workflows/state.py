@@ -7,7 +7,7 @@ class AgentTaskResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task_id: str
     task_version: int = Field(ge=1)
-    agent_name: Literal["supervisor", "activity", "dining", "itinerary"]
+    agent_name: Literal["supervisor", "places", "activity", "dining", "itinerary"]
     status: Literal["completed", "needs_clarification", "failed"]
     evidence_ids: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)

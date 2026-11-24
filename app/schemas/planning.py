@@ -20,6 +20,10 @@ class Place(BaseModel):
     location: Coordinates
     source_ref: str
     fetched_at: AwareDatetime
+    address: str = ""
+    city: str = ""
+    district: str = ""
+    category: str = ""
 
 
 class RouteLeg(BaseModel):

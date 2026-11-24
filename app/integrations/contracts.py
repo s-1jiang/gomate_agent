@@ -13,7 +13,9 @@ class ChatMessage(BaseModel):
 
 
 class LanguageModel(Protocol):
-    async def complete(self, messages: list[ChatMessage], budget: RunBudget) -> str: ...
+    async def complete(
+        self, messages: list[ChatMessage], budget: RunBudget, *, json_mode: bool = False
+    ) -> str: ...
 
 
 class MapProvider(Protocol):

@@ -36,7 +36,7 @@ Limit = Annotated[int, Query(ge=1, le=100)]
 def capabilities():
     return {
         "version": __version__,
-        "stage": "text_chat",
+        "stage": "supervisor_map_search",
         "available": [
             "auth",
             "conversations",
@@ -45,10 +45,15 @@ def capabilities():
             "text_chat",
             "private_text_knowledge",
             "retrieval_sources",
+            "supervisor_dispatch",
+            "supervisor_review",
+            "map_search",
+            "map_display",
         ],
         "planned": ["planning_workflow", "mcp", "private_retrieval", "profiles", "map_ui"],
         "retrieval_method": "lexical",
         "model_provider": "deepseek",
+        "map_provider": "amap",
         "proposed_map_provider": "amap",
     }
 

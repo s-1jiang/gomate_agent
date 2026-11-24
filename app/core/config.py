@@ -40,3 +40,5 @@ class Settings(BaseSettings):
     amap_js_api_key: str = ""
     amap_js_security_code: SecretStr = SecretStr("")
     default_city: str = ""
+    map_timeout_seconds: float = Field(default=10, gt=0, le=30)
+    max_review_rounds: int = Field(default=2, ge=0, le=2)

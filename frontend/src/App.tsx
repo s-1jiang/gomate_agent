@@ -41,7 +41,8 @@ import { AuthDialog } from "./components/AuthDialog";
 import { Dialog } from "./components/Dialog";
 import { KnowledgeDialog } from "./components/KnowledgeDialog";
 import { MessageSources } from "./components/MessageSources";
-import { PlanPanel } from "./components/PlanPanel";
+import { MapPanel } from "./components/MapPanel";
+import { WorkflowTrace } from "./components/WorkflowTrace";
 import { Welcome } from "./components/Welcome";
 
 const TOKEN_KEY = "gomate.session";
@@ -326,9 +327,10 @@ export default function App() {
     }
   }
 
-  async function send(event?: FormEvent) {
+  async function send(event?: FormEvent, contentOverride?: string) {
     event?.preventDefault();
-    if (!draft.trim() || sending || checking || isActiveRun(currentRun) || historyLoading)
+    const messageDraft = contentOverride ?? draft;
+    if (!messageDraft.trim() || sending || checking || isActiveRun(currentRun) || historyLoading)
       return;
     if (!user) {
       setAuthOpen(true);
@@ -337,14 +339,14 @@ export default function App() {
     const version = epoch.current;
     const originalKey = draftKey;
     const originalSelected = selected;
-    const content = city ? `城市：${city}\n${draft.trim()}` : draft.trim();
+    const content = contentOverride ?? (city ? `城市：${city}\n${messageDraft.trim()}` : messageDraft.trim());
     setSending(true);
     setNotice("");
     let sessionId = selected;
     try {
       if (!sessionId) {
         const conversation = await api.createConversation(
-          Array.from(draft.trim()).slice(0, 24).join(""),
+          Array.from(messageDraft.trim()).slice(0, 24).join(""),
         );
         if (version !== epoch.current) return;
         sessionId = conversation.id;
@@ -368,7 +370,7 @@ export default function App() {
       );
       if (version !== epoch.current) return;
       pending.current = null;
-      setDrafts((items) => ({ ...items, [originalKey]: "", [sessionId!]: "" }));
+      if (!contentOverride) setDrafts((items) => ({ ...items, [originalKey]: "", [sessionId!]: "" }));
       const ownMessage: Message = {
         id: run.message_id,
         role: "user",
@@ -653,7 +655,7 @@ export default function App() {
             </span>
             <button
               className="icon-button toggle-plan"
-              aria-label="打开行程预览"
+              aria-label="打开地点地图"
               aria-expanded={planOpen}
               onClick={() => setPlanOpen(true)}
             >
@@ -707,6 +709,7 @@ export default function App() {
                         </span>
                         <p>{message.content}</p>
                         <MessageSources message={message} />
+                        {message.map_result && <WorkflowTrace events={message.map_result.events} />}
                       </div>
                     </article>
                   ))}
@@ -786,8 +789,15 @@ export default function App() {
               onClick={() => setPlanOpen(false)}
             />
           )}
-          <PlanPanel
+          <MapPanel
+            key={`${user?.id || "guest"}:${selected || "new"}`}
+            api={api}
             city={city}
+            result={[...messages].reverse().find((message) => message.map_result)?.map_result || null}
+            signedIn={!!user}
+            busy={active || sending || checking || historyLoading}
+            onError={handleError}
+            onSearch={(keyword, nextCity) => { setCity(nextCity); void send(undefined, `城市：${nextCity}\n请在地图上搜索：${keyword}`); }}
             mobile={planOpen}
             onClose={() => setPlanOpen(false)}
           />
@@ -884,7 +894,7 @@ function RunStatus({ run }: { run: Run }) {
   let text = run.error_message || "消息已保存，可重新发送问题。";
   if (active) {
     title = "正在生成回复";
-    text = "正在调用 DeepSeek，可以取消当前回复。";
+    text = run.workflow_events?.at(-1)?.summary || "Supervisor 正在处理，可以取消当前任务。";
   } else if (scaffold) {
     title = "需求已保存";
     text =

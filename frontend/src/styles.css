@@ -109,6 +109,34 @@ svg {
   .knowledge-button { min-width: 38px; padding: 8px; }
   .knowledge-button > span { display: none; }
 }
+.map-panel { overflow-y: auto; }
+.map-search-form { display: grid; gap: 10px; margin: 20px 0 12px; }
+.map-search-form label { display: grid; gap: 5px; font-size: 0.8125rem; }
+.map-search-form input { width: 100%; min-width: 0; padding: 10px; background: white; border: 1px solid #dce4d7; border-radius: 7px; font: inherit; }
+.map-search-form .button { justify-content: center; }
+.map-helper { font-size: 0.75rem; line-height: 1.7; color: #627263; margin: 10px 0; }
+.empty-map { color: #627263; padding: 24px 0; text-align: center; }
+.empty-map p { font-size: 0.8125rem; line-height: 1.7; }
+.place-map { width: 100%; height: 240px; border-radius: 10px; background: #eef2eb; }
+.place-map-wrap { margin-top: 18px; }
+.map-error { color: #9f4e38; font-size: 0.8125rem; line-height: 1.7; }
+.place-marker { background: #126957; color: white; padding: 5px 8px; border-radius: 12px; box-shadow: 0 2px 5px #0003; font-weight: 600; }
+.load-map { width: 100%; margin-top: 12px; }
+.place-list { margin: 16px 0; padding: 0; list-style: none; }
+.place-list > li { margin-bottom: 12px; padding: 12px; border: 1px solid #dce4d7; border-radius: 9px; overflow-wrap: anywhere; }
+.place-list > li.selected { border-color: #126957; background: #f0f6ed; }
+.place-select { width: 100%; padding: 0; text-align: left; background: transparent; color: inherit; }
+.place-select > * { display: block; margin-bottom: 5px; }
+.place-select strong { font-size: 0.875rem; }
+.place-select span, .place-select small, .place-list a, .place-source { font-size: 0.75rem; line-height: 1.7; }
+.place-list a { color: #126957; }
+.place-source { margin-top: 9px; color: #627263; }
+.place-source summary { cursor: pointer; }
+.workflow-trace { margin-top: 14px; color: #627263; font-size: 0.75rem; line-height: 1.7; }
+.workflow-trace summary { cursor: pointer; }
+.workflow-trace ol { padding-left: 20px; }
+.workflow-trace li { margin-bottom: 9px; }
+.workflow-trace li > span { display: block; }
 .skip-link {
   position: fixed;
   top: 8px;

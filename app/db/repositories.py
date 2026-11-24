@@ -145,6 +145,8 @@ class ConversationRepository:
             for row in rows:
                 item = dict(row)
                 sources = json.loads(item.pop("sources_json"))
+                map_result = item.pop("map_result_json")
+                item["map_result"] = json.loads(map_result) if map_result else None
                 item["sources"] = visible_sources(connection, self.auth, session_id, sources)
                 result.append(item)
         return result
@@ -225,7 +227,27 @@ class RunRepository:
             ).fetchone()
         if row is None:
             raise not_found()
-        return dict(row)
+        item = dict(row)
+        item["workflow_events"] = json.loads(item.pop("workflow_json"))
+        return item
+
+    def progress(self, run_id: str, fencing_token: int, events: list, counts: dict) -> None:
+        with self.database.connect(write=True) as connection:
+            if self._active(connection, run_id, fencing_token) is None:
+                raise AppError("CANCELLED", "任务已取消或过期", 409)
+            connection.execute(
+                "UPDATE runs SET workflow_json = ?, tool_calls = ?, external_requests = ?, "
+                "llm_calls = ?, updated_at = ? WHERE user_id = ? AND id = ?",
+                (
+                    json.dumps(events, ensure_ascii=False),
+                    counts["tool"],
+                    counts["external"],
+                    counts["llm"],
+                    now_iso(),
+                    self.auth.user_id,
+                    run_id,
+                ),
+            )
 
     def start(self, run_id: str) -> dict | None:
         with self.database.connect(write=True) as connection:
@@ -281,7 +303,9 @@ class RunRepository:
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
 
-    def finish(self, run_id, fencing_token, content, sources, retrieval_status, counts) -> bool:
+    def finish(
+        self, run_id, fencing_token, content, sources, retrieval_status, counts, map_result=None
+    ) -> bool:
         from app.retrieval.repository import visible_sources
 
         with self.database.connect(write=True) as connection:
@@ -293,7 +317,8 @@ class RunRepository:
                 raise AppError("KNOWLEDGE_CHANGED", "检索资料已删除，请重新发送问题", 409)
             connection.execute(
                 "INSERT INTO messages(id, user_id, session_id, role, content, created_at, "
-                "sources_json, retrieval_status) VALUES (?, ?, ?, 'assistant', ?, ?, ?, ?)",
+                "sources_json, retrieval_status, map_result_json) "
+                "VALUES (?, ?, ?, 'assistant', ?, ?, ?, ?, ?)",
                 (
                     str(uuid4()),
                     self.auth.user_id,
@@ -302,6 +327,7 @@ class RunRepository:
                     now_iso(),
                     json.dumps(sources, ensure_ascii=False),
                     retrieval_status,
+                    json.dumps(map_result, ensure_ascii=False) if map_result else None,
                 ),
             )
             connection.execute(

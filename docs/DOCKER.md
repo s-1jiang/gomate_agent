@@ -48,8 +48,9 @@ docker compose down
 - 根目录和前端目录分别提供 `.dockerignore`；源码凭证、Git 元数据、本机数据库、虚拟环境和 node_modules 不进入构建上下文。
 - DeepSeek、高德 Web 服务 Key 只由 Compose 在运行时传入 backend，前端镜像不包含这些密钥。
 - 浏览器保持登录默认 30 天，由 `REMEMBER_TOKEN_TTL_SECONDS` 控制；HTTP 本地访问默认 `AUTH_COOKIE_SECURE=false`，HTTPS 部署应设为 `true`。详见 [登录说明](LOGIN.md)。
+- 高德 JS Key 和安全密钥在运行时传给 backend；前端通过鉴权配置接口读取公开 JS Key，安全密钥由固定样式代理使用。服务端搜索与修改轮数使用同一 Run 预算，见 [地图搜索](MAP_SEARCH.md)。
 - `.env` 的环境变量可通过本机进程环境覆盖；不要把 `docker compose config` 展开的敏感值粘贴到日志或提交中，检查时使用 `docker compose config --quiet`。
-- 当前默认仅绑定宿主机 `127.0.0.1`，用于本地使用。公网部署需另行配置域名、HTTPS 和入口限流。
+- 当前前端绑定宿主机 `0.0.0.0`，支持局域网访问；端口由 `.env` 的 `GOMATE_WEB_PORT` 控制。公网部署需另行配置域名、HTTPS 和入口限流。
 
 ## 验证
 
@@ -77,4 +78,4 @@ python scripts/smoke_chat.py
 
 代码变更后执行 `docker compose up -d --build --wait`。仅修改 `.env` 时执行 `docker compose up -d --no-deps --force-recreate --wait backend`；普通 restart 不更新容器环境变量。
 
-完整行程生成、真实高德查询和多 Agent 编排尚未接入；Docker 封装不会自动启用这些能力。
+Supervisor 地点搜索已接通，真实高德权限与结果质量需实际验证。完整行程、路线和天气尚未接入。

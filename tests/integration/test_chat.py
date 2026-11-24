@@ -25,7 +25,16 @@ def provider(client, settings):
         return httpx.Response(
             200,
             json={
-                "choices": [{"message": {"content": answers[-1]}, "finish_reason": "stop"}],
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"kind": "answer", "answer": answers[-1], "tasks": []}
+                            )
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
             },
         )
 
@@ -232,7 +241,7 @@ def test_inflight_model_is_cancelled_and_late_answer_is_not_saved(client, settin
         entered, cancelled = asyncio.Event(), asyncio.Event()
 
         class SlowModel:
-            async def complete(self, messages, budget):
+            async def complete(self, messages, budget, **kwargs):
                 await budget.reserve("llm")
                 await budget.reserve("external")
                 entered.set()
@@ -285,9 +294,9 @@ def test_deleting_evidence_during_inference_discards_answer(client, settings):
     )
 
     class DeletingModel:
-        async def complete(self, messages, budget):
+        async def complete(self, messages, budget, **kwargs):
             knowledge.delete(doc["id"])
-            return "依据旧资料。[R1]"
+            return json.dumps({"kind": "answer", "answer": "依据旧资料。[R1]", "tasks": []})
 
     service = client.app.state.chat
     service.model = DeletingModel()
@@ -318,4 +327,4 @@ def test_upgrade_preserves_existing_messages_and_is_repeatable(tmp_path):
         row = connection.execute("SELECT * FROM messages").fetchone()
         assert row["content"] == "old content"
         assert row["sources_json"] == "[]" and row["retrieval_status"] is None
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 3
