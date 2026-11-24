@@ -60,7 +60,7 @@ export function PlaceMap({ config, places, selectedId, onSelect, visible, paths 
   }, [visible, ready]);
   return <div className="place-map-wrap">
     <div className="place-map" ref={node} aria-label="高德地点地图" />
-    {error && <p role="alert" className="map-error">{error} 你仍可查看下方地点及来源。</p>}
+    {error && <p role="alert" className="map-error">{error} 可通过地点链接查看。</p>}
     {!ready && !error && <p role="status">正在加载高德地图…</p>}
   </div>;
 }

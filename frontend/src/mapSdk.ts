@@ -36,7 +36,7 @@ export function loadMapSdk(config: MapConfig): Promise<AMapSdk> {
       clearTimeout(timer);
       script.remove();
       loading = null;
-      reject(new Error("地图加载失败，请检查网络或高德 JS Key 的域名限制。"));
+      reject(new Error("地图暂时无法加载，请稍后再试。"));
     };
     const timer = setTimeout(fail, 12000);
     script.onerror = fail;

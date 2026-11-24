@@ -21,8 +21,9 @@ it("renders travel and stay times, activities, evidence and the map between stop
   expect(first.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(map.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(within(first).getByRole("link", { name: "[W1]" })).toHaveAttribute("href", "https://parks.example.org/A");
-  expect(within(first).getByText("玩法建议")).toBeVisible();
-  expect(within(first).getByText("待确认")).toBeVisible();
+  expect(within(first).getByText("建议玩法")).toBeVisible();
+  expect(within(first).getByText("找合适的位置坐一会儿")).toBeVisible();
+  expect(screen.queryByText("出发前确认开放与预约")).not.toBeInTheDocument();
   expect(request).not.toHaveBeenCalled();
   expect(document.querySelector('script[src*="amap"]')).toBeNull();
 });
@@ -33,10 +34,35 @@ it("keeps the inline schematic and source links usable when the interactive map 
     search_enabled: true, js_key: "", default_city: "", security_proxy: "/api/v1/maps/_AMapService" });
   const user = userEvent.setup();
   render(<ItineraryAnswer api={api} result={result} />);
-  await user.click(screen.getByRole("button", { name: "加载交互地图" }));
-  expect(await screen.findByRole("status")).toHaveTextContent("交互底图尚未配置");
+  await user.click(screen.getByRole("button", { name: "查看地图" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("地图暂时无法打开，可通过地点链接查看");
   expect(screen.getByRole("img", { name: /地点位置示意/ })).toBeVisible();
   expect(screen.getAllByRole("link", { name: "在地图中查看" })).toHaveLength(2);
+});
+
+it("hides legacy assumptions and internal explanations while preserving useful trip details", () => {
+  const legacy = structuredClone(result);
+  const plan = legacy.itinerary!;
+  plan.request.assumptions = ["人数未说明，暂按1人", "交通方式未说明，默认公共交通"];
+  plan.summary = "本方案由 Supervisor 分派 Agent，已通过校验。";
+  plan.warnings = ["未启用联网检索：需要配置 Tavily API Key。"];
+  plan.days[0].stops[0].reason = "根据 POI 编号和默认参数生成。";
+  plan.days[0].stops[0].practical_info = [{ text: "入口需要提前预约", evidence_ids: ["W1"] }];
+  render(<ItineraryAnswer api={new ApiClient("fake")} result={legacy} />);
+  expect(screen.queryByText(/本次采用的假设|人数未说明|默认公共交通/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Supervisor|Agent|校验|Tavily|API Key|POI|GCJ-02|余量/)).not.toBeInTheDocument();
+  expect(screen.getByText("入口需要提前预约")).toBeVisible();
+  expect(screen.getByText("出发前请确认开放和预约信息。")).toBeVisible();
+  expect(screen.getByText("09:30—10:45")).toHaveTextContent("75 分钟");
+  expect(screen.getByRole("region", { name: "参考来源" })).toHaveTextContent("[W1]");
+});
+
+it("labels the first stop as the start of the visit when no departure point was provided", () => {
+  const withoutOrigin = structuredClone(result);
+  withoutOrigin.itinerary!.origin = null;
+  withoutOrigin.itinerary!.request.return_to_origin = false;
+  render(<ItineraryAnswer api={new ApiClient("fake")} result={withoutOrigin} />);
+  expect(screen.getByText(/09:00 开始游玩/)).toBeVisible();
 });
 
 it("does not invent connecting route geometry when the provider returned no paths", () => {

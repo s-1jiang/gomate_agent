@@ -46,11 +46,12 @@ function backend({
   replyMap = null as MapSearchResult | null,
   runPending = false,
   initialRun = null as Run | null,
+  initialMessages = [] as Message[],
   failFirstPoll = false,
 } = {}) {
   let signedInCookie = cookieSession;
   let conversations = [...initial];
-  const messages: Message[] = [];
+  const messages: Message[] = [...initialMessages];
   let latest: Run | null = initialRun;
   let hold = runPending;
   let polls = 0;
@@ -106,7 +107,7 @@ function backend({
       if (path === "/api/v1/runs/run-1") {
         polls += 1;
         if (failFirstPoll && polls === 1) throw new TypeError("Progress temporarily offline");
-        if (hold) { latest = { ...RUN, status: "running" }; return response(latest); }
+        if (hold) { latest = { ...RUN, workflow_events: latest?.workflow_events, status: "running" }; return response(latest); }
         if (!runFailure && !messages.some((item) => item.id === "reply-1")) {
           messages.push({
             id: "reply-1", role: "assistant", content: replyText,
@@ -163,11 +164,17 @@ describe("GoMate workspace", () => {
 
   it("recovers a running job from the server after opening a conversation in a fresh page", async () => {
     sessionStorage.setItem("gomate.session", "test-token");
-    const server = backend({ initial: [SESSION], initialRun: { ...RUN, status: "running" }, runPending: true });
+    const server = backend({ initial: [SESSION], initialRun: { ...RUN, status: "running",
+      workflow_events: [{ stage: "review", agent: "supervisor", task_id: "itinerary", task_version: 2,
+        summary: "Supervisor 审查第2轮 Agent 结果" }],
+    }, runPending: true, initialMessages: [{ id: RUN.message_id, role: "user", content: "安排半日游",
+      client_message_id: null, created_at: RUN.created_at }] });
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "打开会话：周末的想法" }));
     expect(await screen.findByRole("button", { name: "取消当前任务" })).toBeVisible();
+    expect(await screen.findByText("可以切换会话，回复会继续生成。")).toBeVisible();
+    expect(screen.queryByText(/Supervisor|Agent|审查第2轮/)).not.toBeInTheDocument();
     expect(server.calls.some((call) => call.path.endsWith("/runs/latest"))).toBe(true);
     server.finish();
     expect(await screen.findByText("可以先从附近的公园开始。", {}, { timeout: 3000 })).toBeVisible();
@@ -196,6 +203,8 @@ describe("GoMate workspace", () => {
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(await screen.findByRole("region", { name: "完整游玩行程" })).toBeVisible();
     expect(screen.queryByText("RAW_ITINERARY_FALLBACK")).not.toBeInTheDocument();
+    expect(screen.queryByText("任务分发与审查记录")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Supervisor|本次采用的假设/)).not.toBeInTheDocument();
   });
   it("clears expired login state and asks for authentication again", async () => {
     sessionStorage.setItem("gomate.session", "expired-token");
@@ -421,7 +430,7 @@ describe("GoMate workspace", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("回复已完成")).not.toBeInTheDocument();
     expect(screen.queryByText("对话已保存。")).not.toBeInTheDocument();
-    expect(screen.getByText("未检索到相关资料，本次回复由模型生成。")).toBeInTheDocument();
+    expect(screen.queryByText("未检索到相关资料，本次回复由模型生成。")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("检索来源")).not.toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "输入出行需求" }),
@@ -486,13 +495,13 @@ describe("GoMate workspace", () => {
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     await screen.findByText("可以去河边公园。[R1]");
     const sources = screen.getByRole("region", { name: "检索来源" });
-    expect(within(sources).getByText("正文已引用")).toBeInTheDocument();
-    expect(within(sources).getByText("已召回，正文未引用")).toBeInTheDocument();
+    expect(within(sources).getByText("正文引用")).toBeInTheDocument();
+    expect(within(sources).getByText("参考资料")).toBeInTheDocument();
     await user.click(within(sources).getByText("周末笔记"));
     const first = within(sources.querySelector("details")!);
     expect(first.getByText("公园沿河，适合散步。")).toBeVisible();
-    expect(first.getByText(/周末笔记.md · 第 2–4 行 · 版本 1/)).toBeVisible();
-    expect(first.getByText("test-content-hash")).toBeVisible();
+    expect(first.getByText("周末笔记.md · 第 2–4 行")).toBeVisible();
+    expect(first.queryByText(/SHA-256|test-content-hash|document-1|chunk-1|版本 1/)).not.toBeInTheDocument();
   });
 
   it("submits panel searches through chat and shows reviewed places without losing a typed draft", async () => {
@@ -518,7 +527,7 @@ describe("GoMate workspace", () => {
     expect(screen.getByRole("textbox", { name: "输入出行需求" })).toHaveValue("保留的草稿");
   });
 
-  it("shows provider failures without inventing an assistant answer", async () => {
+  it("shows a simple failure message without provider diagnostics or an invented answer", async () => {
     sessionStorage.setItem("gomate.session", "test-token");
     backend({ runFailure: { code: "PROVIDER_AUTH_FAILED", message: "DeepSeek 密钥无效或没有访问权限" } });
     const user = userEvent.setup();
@@ -526,7 +535,8 @@ describe("GoMate workspace", () => {
     await screen.findByText("tester");
     await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "你好");
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("DeepSeek 密钥无效或没有访问权限")).toBeInTheDocument();
+    expect(await screen.findByText("暂时无法生成回复，请稍后重试。")).toBeVisible();
+    expect(screen.queryByText("DeepSeek 密钥无效或没有访问权限")).not.toBeInTheDocument();
     expect(screen.queryByText("可以先从附近的公园开始。")).not.toBeInTheDocument();
   });
 

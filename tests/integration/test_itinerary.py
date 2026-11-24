@@ -221,7 +221,7 @@ def test_full_itinerary_uses_route_time_and_persists_replay_without_extra_calls(
     assert day["legs"][-1]["destination_poi_id"] == "O"
     assert day["legs"][0]["paths"] == [[[120.1, 30.25], [120.2, 30.25]]]
     assert plan["origin"]["poi_id"] == "O"
-    assert any("未启用联网检索" in warning for warning in plan["warnings"])
+    assert plan["warnings"] == ["出发前请确认开放和预约信息。"]
     assert result["events"] == run["workflow_events"]
     assert (run["llm_calls"], run["external_requests"], run["tool_calls"]) == (5, 10, 6)
     assert client.post(path, headers=headers, json=body).json()["id"] == run["id"]
@@ -264,6 +264,7 @@ def test_conflicting_or_unobserved_plan_never_published(client, login, itinerary
     assert result["status"] == "revision_limit"
     assert result["itinerary"] is None and not result["places"]
     assert len(itinerary_scenario.drafts) == 3
+    assert messages[-1]["content"] == "暂时没能安排合适的行程，请调整时间或地点后重试。"
 
 
 def test_web_sources_bound_to_place_and_private_context_not_sent(
@@ -280,14 +281,18 @@ def test_web_sources_bound_to_place_and_private_context_not_sent(
     assert "fake-tavily" not in json.dumps(messages)
 
 
-def test_web_failure_degrades_to_explicit_suggestions(client, login, settings, itinerary_scenario):
+def test_web_failure_keeps_replies_useful_without_provider_diagnostics(
+    client, login, settings, itinerary_scenario, caplog
+):
     settings.tavily_api_key = "fake-tavily"
     itinerary_scenario.web_failure = True
     run, messages, _, _ = execute(client, login())
     assert run["status"] == "succeeded", run
     plan = messages[-1]["map_result"]["itinerary"]
     assert not plan["web_sources"]
-    assert any("鉴权失败" in warning for warning in plan["warnings"])
+    assert plan["warnings"] == ["出发前请确认开放和预约信息。"]
+    assert "鉴权失败" not in json.dumps(messages, ensure_ascii=False)
+    assert "Optional itinerary research failed" in caplog.text
 
 
 @pytest.mark.parametrize("case", ["ambiguous_origin", "route_failure"])
@@ -307,7 +312,8 @@ def test_no_origin_does_not_invent_outbound_or_return_travel(client, login, itin
     assert run["status"] == "succeeded", run
     plan = messages[-1]["map_result"]["itinerary"]
     assert plan["origin"] is None and len(plan["days"][0]["legs"]) == 1
-    assert any("未提供出发点" in warning for warning in plan["warnings"])
+    assert "开始游玩" in messages[-1]["content"]
+    assert "未提供出发点" not in messages[-1]["content"]
 
 
 def test_stale_plan_review_fails_without_answer(client, login, itinerary_scenario):

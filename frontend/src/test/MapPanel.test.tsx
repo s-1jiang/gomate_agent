@@ -38,20 +38,19 @@ it("sends a city and keyword to the chat workflow and uses provider data in sour
   await user.click(screen.getByRole("button", { name: "搜索地点" }));
   expect(search).toHaveBeenCalledWith("咖啡馆", "杭州");
   expect(screen.getByText("[M1] 河边咖啡")).toBeInTheDocument();
-  await user.click(screen.getByText("来源与查询时间"));
-  expect(screen.getByText("高德地图 · POI：B001")).toBeVisible();
+  expect(screen.getByText("来源：高德地图")).toBeVisible();
   const link = screen.getByRole("link", { name: "在高德查看" });
   expect(link.getAttribute("href")).toContain("https://uri.amap.com/marker?");
   expect(link.getAttribute("href")).toContain("120.15%2C30.25");
-  await user.click(screen.getByText("任务分发与审查记录"));
-  expect(screen.getByText("退回修改：请缩小搜索区域")).toBeVisible();
+  expect(screen.queryByText("任务分发与审查记录")).not.toBeInTheDocument();
+  expect(screen.queryByText(/退回修改|POI|Agent|GCJ-02|JS Key/)).not.toBeInTheDocument();
   expect(loadMapSdk).not.toHaveBeenCalled();
 });
 
 it("never shows rejected candidates at the revision limit", async () => {
   render(<MapPanel api={api()} city="杭州" result={{ ...result, status: "revision_limit", places: [] }}
     mobile={false} signedIn busy={false} onClose={vi.fn()} onSearch={vi.fn()} onError={vi.fn()} />);
-  expect(screen.getByRole("status")).toHaveTextContent("仍未通过审查");
+  expect(screen.getByRole("status")).toHaveTextContent("暂时没找到合适的地点");
   expect(screen.queryByText("[M1] 河边咖啡")).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "在高德查看" })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText("搜索城市")).toHaveValue("杭州"));

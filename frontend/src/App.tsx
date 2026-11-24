@@ -10,7 +10,6 @@ import {
 import {
   ArrowUp,
   BookOpen,
-  Check,
   ChevronDown,
   Compass,
   Info,
@@ -43,7 +42,6 @@ import { KnowledgeDialog } from "./components/KnowledgeDialog";
 import { MessageSources } from "./components/MessageSources";
 import { MapPanel } from "./components/MapPanel";
 import { ItineraryAnswer } from "./components/ItineraryAnswer";
-import { WorkflowTrace } from "./components/WorkflowTrace";
 import { Welcome } from "./components/Welcome";
 
 const TOKEN_KEY = "gomate.session";
@@ -756,7 +754,6 @@ export default function App() {
                         </span>
                         {message.map_result?.itinerary ? <ItineraryAnswer api={api} result={message.map_result} /> : <p>{message.content}</p>}
                         <MessageSources message={message} />
-                        {message.map_result && <WorkflowTrace events={message.map_result.events} />}
                       </div>
                     </article>
                   ))}
@@ -935,32 +932,24 @@ export default function App() {
 function RunStatus({ run }: { run: Run }) {
   if (run.status === "succeeded") return null;
   const active = isActiveRun(run);
-  const scaffold = run.error_code === "WORKFLOW_NOT_IMPLEMENTED";
-  const saved = scaffold;
   let title = "处理未完成";
-  let text = run.error_message || "消息已保存，可重新发送问题。";
+  let text = "暂时无法生成回复，请稍后重试。";
   if (active) {
-    title = "正在生成回复";
-    text = run.workflow_events?.at(-1)?.summary || "Supervisor 正在处理，可以取消当前任务。";
-  } else if (scaffold) {
-    title = "需求已保存";
-    text =
-      "当前支持保存需求和查看历史会话，暂不支持生成完整行程。你可以继续补充出发时间、预算等信息。";
-  } else if (run.status === "cancelled") { title = "回复已取消"; text = "消息已保存，可以继续提问。"; }
+    title = run.status === "queued" ? "正在排队" : "正在生成回复";
+    text = "可以切换会话，回复会继续生成。";
+  } else if (run.status === "cancelled") { title = "回复已取消"; text = "可以继续提问。"; }
   else if (run.status === "waiting_user") {
     title = "请补充信息";
     text = "请补充出发时间、地点或预算。";
   }
   return (
     <div
-      className={`run-status ${saved ? "saved" : active ? "pending" : "stopped"}`}
+      className={`run-status ${active ? "pending" : "stopped"}`}
       role="status"
     >
       <span className="run-icon">
         {active ? (
           <LoaderCircle size={19} className="spin" />
-        ) : saved ? (
-          <Check size={19} />
         ) : (
           <Info size={19} />
         )}

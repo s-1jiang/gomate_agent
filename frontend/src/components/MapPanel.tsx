@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { MapPin, Search, X } from "lucide-react";
 import { ApiClient, errorMessage, type MapConfig, type MapSearchResult } from "../api";
 import { PlaceMap } from "./PlaceMap";
-import { WorkflowTrace } from "./WorkflowTrace";
 
 export function MapPanel({ api, city, result, mobile, signedIn, busy, onClose, onSearch, onError }: {
   api: ApiClient; city: string; result: MapSearchResult | null; mobile: boolean;
@@ -43,27 +42,23 @@ export function MapPanel({ api, city, result, mobile, signedIn, busy, onClose, o
     </form>
     <p className="map-helper">这里查询地点。需要完整行程时，在对话中告诉我出发点、时间和游玩偏好。</p>
     {notice && <p role="alert" className="map-error">{notice}</p>}
-    {config && !config.search_enabled && <p className="map-helper">地点查询需要在后端配置高德 Web 服务 Key。</p>}
+    {config && !config.search_enabled && <p className="map-helper">地点搜索暂时不可用，请稍后再试。</p>}
     {places.length > 0 && <>
       {display && config?.display_enabled ? <PlaceMap config={config} places={places} selectedId={selectedId} onSelect={setSelectedId} visible={mobile} /> :
-        config?.display_enabled ? <button className="button secondary load-map" onClick={() => setDisplay(true)}>显示高德地图</button> : <p className="map-helper">地图显示需要配置 JS Key 和安全密钥。地点搜索与列表仍可使用。</p>}
-      <p className="map-helper">{result?.city} · 本会话最近一次通过审查的地点 · GCJ-02</p>
+        config?.display_enabled ? <button className="button secondary load-map" onClick={() => setDisplay(true)}>显示高德地图</button> : <p className="map-helper">可点击地点链接查看地图。</p>}
+      <p className="map-helper">{result?.city}</p>
     </>}
     {!result && <div className="empty-map"><MapPin size={30} /><p>输入城市和关键词，或在对话中提出地点需求。</p></div>}
     {result?.status === "no_results" && <p role="status">没有查到合适地点，可以调整城市或关键词。</p>}
-    {result?.status === "revision_limit" && <p role="status">结果仍未通过审查，请补充区域或具体要求。</p>}
+    {result?.status === "revision_limit" && <p role="status">暂时没找到合适的地点，请调整区域或要求。</p>}
     {result?.status === "needs_clarification" && <p role="status">请在对话中补充需要的信息。</p>}
     <ol className="place-list">{places.map((place) => {
       const params = new URLSearchParams({ position: `${place.location.longitude},${place.location.latitude}`, name: place.name, coordinate: "gaode", callnative: "0", src: "gomate" });
       return <li key={place.poi_id} className={selectedId === place.poi_id ? "selected" : ""}>
         <button className="place-select" onClick={() => setSelectedId(place.poi_id)}><strong>[{place.label}] {place.name}</strong><span>{place.address || "地址暂缺"}</span><small>{place.city} {place.district} · {place.category}</small></button>
         <a href={`https://uri.amap.com/marker?${params}`} target="_blank" rel="noopener noreferrer">在高德查看</a>
-        <details className="place-source"><summary>来源与查询时间</summary>
-          <p>高德地图 · POI：{place.poi_id}</p><p>{new Date(place.fetched_at).toLocaleString()} · {place.agent} Agent</p>
-          <p>{place.location.longitude}, {place.location.latitude} · GCJ-02</p><small>营业、价格和路线尚未核验。</small>
-        </details>
+        <small className="place-source">来源：高德地图</small>
       </li>;
     })}</ol>
-    {result && <WorkflowTrace events={result.events} />}
   </aside>;
 }
