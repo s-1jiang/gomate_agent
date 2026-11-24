@@ -20,7 +20,14 @@ class Scenario:
     stale_review: bool = False
     no_origin: bool = False
     ambiguous_origin: bool = False
+    prefixed_origin: bool = False
     route_failure: bool = False
+    transit_gap: bool = False
+    long_walk: bool = False
+    walk_limit: int | None = None
+    route_replan: bool = False
+    route_auth_failure: bool = False
+    route_transient_failure: bool = False
     web_failure: bool = False
     calls: list = field(default_factory=list)
     drafts: list = field(default_factory=list)
@@ -64,10 +71,13 @@ def itinerary_scenario(client, settings):
                             "end_at": "2026-11-25T13:00:00+08:00",
                         }
                     ],
-                    "origin_name": "" if scenario.no_origin else "杭州东站",
+                    "origin_name": ""
+                    if scenario.no_origin
+                    else ("杭州市杭州东站" if scenario.prefixed_origin else "杭州东站"),
                     "return_to_origin": not scenario.no_origin,
                     "mode": "transit",
                     "party_size": 2,
+                    "max_walking_meters": scenario.walk_limit,
                 },
             }
         elif "只负责自己的任务" in system:
@@ -80,6 +90,8 @@ def itinerary_scenario(client, settings):
             sources = payload["web_sources"]
             stops = []
             for index, name in enumerate(("A", "B")):
+                if name == "B" and scenario.route_replan and payload["unavailable_legs"]:
+                    continue
                 ids = [source["label"] for source in sources if source["poi_id"] == name]
                 if scenario.forged_source:
                     ids = ["W999"]
@@ -118,19 +130,54 @@ def itinerary_scenario(client, settings):
 
     async def maps(request):
         if request.url.path == "/v5/place/text":
-            if request.url.params["keywords"] == "杭州东站":
+            if request.url.params["keywords"] in {"杭州东站", "杭州市杭州东站"}:
                 rows = [poi("O", "杭州东站", 120.1)]
+                if scenario.prefixed_origin:
+                    rows.append(poi("O2", "杭州东站北广场", 120.11))
                 if scenario.ambiguous_origin:
                     rows = [poi("O", "东站北广场"), poi("O2", "东站南广场")]
             else:
                 rows = [poi("A", "湖畔公园"), poi("B", "文化公园", 120.2)]
             return httpx.Response(200, json={"status": "1", "pois": rows})
+        if request.url.path == "/v5/direction/walking":
+            scenario.routes.append({"mode": "walking", **dict(request.url.params)})
+            if scenario.route_failure:
+                return httpx.Response(200, json={"status": "1", "route": {"paths": []}})
+            return httpx.Response(
+                200,
+                json={
+                    "status": "1",
+                    "route": {
+                        "paths": [
+                            {
+                                "distance": "2500" if scenario.long_walk else "1418",
+                                "cost": {"duration": "1134"},
+                                "steps": [
+                                    {
+                                        "instruction": "沿步道走到下一站",
+                                        "polyline": "120.15,30.25;120.2,30.25",
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                },
+            )
         assert request.url.path == "/v5/direction/transit/integrated"
         assert request.url.params["city1"] == request.url.params["city2"] == "0571"
         assert request.url.params["date"] == "2026-11-25"
         assert request.url.params["show_fields"] == "cost,polyline"
         scenario.routes.append(dict(request.url.params))
-        if scenario.route_failure:
+        if scenario.route_auth_failure:
+            return httpx.Response(200, json={"status": "0", "infocode": "10012"})
+        if scenario.route_transient_failure and len(scenario.routes) == 1:
+            return httpx.Response(503)
+        middle_leg = request.url.params["origin"].startswith("120.150000") and request.url.params[
+            "destination"
+        ].startswith("120.200000")
+        if scenario.route_failure or (
+            (scenario.transit_gap or scenario.route_replan) and middle_leg
+        ):
             return httpx.Response(200, json={"status": "1", "route": {"transits": []}})
         return httpx.Response(
             200,
@@ -314,6 +361,111 @@ def test_no_origin_does_not_invent_outbound_or_return_travel(client, login, itin
     assert plan["origin"] is None and len(plan["days"][0]["legs"]) == 1
     assert "开始游玩" in messages[-1]["content"]
     assert "未提供出发点" not in messages[-1]["content"]
+
+
+def test_city_prefix_in_origin_does_not_force_an_unnecessary_clarification(
+    client, login, itinerary_scenario
+):
+    itinerary_scenario.prefixed_origin = True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded", run
+    plan = messages[-1]["map_result"]["itinerary"]
+    assert plan["origin"]["poi_id"] == "O" and plan["origin"]["name"] == "杭州东站"
+
+
+def test_public_transit_gap_uses_real_walk_and_supervisor_reviews_complete_schedule(
+    client, login, itinerary_scenario
+):
+    scenario = itinerary_scenario
+    scenario.transit_gap = True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded", run
+    day = messages[-1]["map_result"]["itinerary"]["days"][0]
+    assert [leg["mode"] for leg in day["legs"]] == ["transit", "walking", "transit"]
+    walking = day["legs"][1]
+    assert (walking["distance_meters"], walking["duration_minutes"]) == (1418, 19)
+    assert walking["paths"] == [[[120.15, 30.25], [120.2, 30.25]]]
+    assert walking["source_ref"] == "amap:route:walking:A:B"
+    assert day["finish_at"] == "2026-11-25T12:44:00+08:00"
+    assert day["total_walking_meters"] == 1618
+    assert scenario.reviews[-1]["schedule"][0]["legs"][1]["mode"] == "walking"
+    assert len(scenario.drafts) == 1 and len(scenario.routes) == 4
+    assert "ROUTE_NOT_FOUND" not in messages[-1]["content"]
+
+
+def test_unusable_leg_is_sent_back_to_planner_without_repeating_missing_routes(
+    client, login, itinerary_scenario
+):
+    scenario = itinerary_scenario
+    scenario.route_replan, scenario.long_walk = True, True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded", run
+    plan = messages[-1]["map_result"]["itinerary"]
+    assert [stop["poi_id"] for stop in plan["days"][0]["stops"]] == ["A"]
+    assert plan["revision_count"] == 1 and len(scenario.reviews) == 1
+    constraint = scenario.drafts[-1]["unavailable_legs"][0]
+    assert (constraint["origin_poi_id"], constraint["destination_poi_id"]) == ("A", "B")
+    assert "2500米" in scenario.drafts[-1]["feedback"]
+    assert any(event["stage"] == "revise" for event in run["workflow_events"])
+    assert scenario.drafts[-1]["request"] == scenario.drafts[0]["request"]
+
+
+def test_supervisor_can_revise_mixed_plan_without_repeating_route_observations(
+    client, login, itinerary_scenario
+):
+    scenario = itinerary_scenario
+    scenario.transit_gap, scenario.revise_first = True, True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded", run
+    assert messages[-1]["map_result"]["itinerary"]["revision_count"] == 1
+    assert len(scenario.drafts) == 2 and len(scenario.reviews) == 2
+    assert len(scenario.routes) == 4
+    assert scenario.drafts[-1]["feedback"] == "请保留第一站并增加休息安排"
+
+
+@pytest.mark.parametrize("limit", [0, 1000])
+def test_infeasible_walk_limit_returns_specific_question_after_bounded_replanning(
+    client, login, itinerary_scenario, limit
+):
+    scenario = itinerary_scenario
+    scenario.transit_gap, scenario.walk_limit = True, limit
+    run, messages, _, _ = execute(client, login())
+    result = messages[-1]["map_result"]
+    assert result["status"] == "needs_clarification" and result["itinerary"] is None
+    assert "湖畔公园 → 文化公园" in messages[-1]["content"]
+    assert len(scenario.drafts) == 3
+    assert all(draft["request"]["max_walking_meters"] == limit for draft in scenario.drafts)
+    # An unchanged infeasible draft reuses the same absence, not paid API requests.
+    assert len(scenario.routes) == (2 if limit == 0 else 3)
+
+
+def test_mixed_itinerary_still_enforces_total_walking_limit(client, login, itinerary_scenario):
+    scenario = itinerary_scenario
+    scenario.transit_gap, scenario.walk_limit = True, 1500
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded", run
+    assert messages[-1]["map_result"]["itinerary"] is None
+    assert "步行距离超过用户上限" in scenario.drafts[-1]["feedback"]
+    assert len(scenario.drafts) == 3 and len(scenario.routes) == 4
+
+
+def test_route_service_failure_is_not_claimed_as_a_missing_route(client, login, itinerary_scenario):
+    scenario = itinerary_scenario
+    scenario.route_auth_failure = True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "failed" and run["error_code"] == "ROUTE_AUTH_FAILED"
+    assert len(messages) == 1 and len(scenario.drafts) == 1 and len(scenario.routes) == 1
+    assert any("ROUTE_AUTH_FAILED" in event["summary"] for event in run["workflow_events"])
+
+
+def test_temporary_route_failure_recovers_without_new_planning_round(
+    client, login, itinerary_scenario
+):
+    scenario = itinerary_scenario
+    scenario.route_transient_failure = True
+    run, messages, _, _ = execute(client, login())
+    assert run["status"] == "succeeded" and messages[-1]["map_result"]["itinerary"]
+    assert len(scenario.drafts) == 1 and len(scenario.routes) == 4
 
 
 def test_stale_plan_review_fails_without_answer(client, login, itinerary_scenario):

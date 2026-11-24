@@ -19,6 +19,8 @@ practical_info 只写对出行有用的开放、门票、预约注意事项，�
 不提 Supervisor、Agent、API、SDK、JSON、POI 编号或坐标系；这些只供内部处理。
 evidence_ids 只能引用该地点实际检索的 W 编号，不能引用其他地点或造编号。不要在 text 中另写引用标签。
 Supervisor 退回时，依据 feedback、之前方案和验证错误修改，不改变用户的时间窗口、预算或交通要求。
+unavailable_legs 记录已查到不可行的路段与原因；应改顺序或替换非必去地点，不重复相同的失败安排。
+公共交通可包含程序查到的短途步行衔接，遵守步行限制；不能把整段改成驾车或编造交通耗时。
 只输出 JSON，不输出思考过程：
 {"title":"杭州半日安排","summary":"沿湖散步，再去附近公园休息。",
 "days":[{"window_index":0,"stops":[{"poi_id":"实际ID","duration_minutes":90,"kind":"visit",

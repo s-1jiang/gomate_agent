@@ -87,6 +87,63 @@ def test_missing_route_duration_is_failure_not_zero_time(settings):
         )
 
 
+@pytest.mark.parametrize(
+    "payload,code",
+    [
+        ({"status": "0", "infocode": "10012"}, "ROUTE_AUTH_FAILED"),
+        ({"status": "0", "infocode": "10002"}, "ROUTE_AUTH_FAILED"),
+        ({"status": "0", "infocode": "10020"}, "ROUTE_RATE_LIMITED"),
+        ({"status": "0", "infocode": "40000"}, "ROUTE_RATE_LIMITED"),
+        ({"status": "0", "infocode": "20801"}, "ROUTE_NOT_FOUND"),
+        ({"status": "0", "infocode": "20000"}, "INVALID_ROUTE_ARGUMENT"),
+        ({"status": "1", "route": {"paths": []}}, "ROUTE_NOT_FOUND"),
+        ({"status": "1", "route": {}}, "INVALID_ROUTE_OUTPUT"),
+        ({"status": "1", "route": {"paths": [None]}}, "INVALID_ROUTE_OUTPUT"),
+        ([], "INVALID_ROUTE_OUTPUT"),
+    ],
+)
+def test_route_adapter_distinguishes_no_route_from_service_errors(settings, payload, code):
+    settings.amap_web_service_key = "fake-key-never-log"
+
+    async def handler(request):
+        return httpx.Response(200, json=payload)
+
+    with pytest.raises(AppError) as error:
+        asyncio.run(
+            AMapClient(settings, transport=httpx.MockTransport(handler)).get_route(
+                origin=place("O"),
+                destination=place("A"),
+                mode="walking",
+                departure_at=datetime.fromisoformat("2026-11-25T09:00:00+08:00"),
+                budget=RunBudget.create(),
+            )
+        )
+    assert error.value.code == code
+
+
+@pytest.mark.parametrize(
+    "status,code",
+    [(429, "ROUTE_RATE_LIMITED"), (403, "ROUTE_AUTH_FAILED"), (503, "ROUTE_UNAVAILABLE")],
+)
+def test_route_http_failures_are_classified(settings, status, code):
+    settings.amap_web_service_key = "fake"
+
+    async def handler(request):
+        return httpx.Response(status)
+
+    with pytest.raises(AppError) as error:
+        asyncio.run(
+            AMapClient(settings, transport=httpx.MockTransport(handler)).get_route(
+                origin=place("O"),
+                destination=place("A"),
+                mode="walking",
+                departure_at=datetime.fromisoformat("2026-11-25T09:00:00+08:00"),
+                budget=RunBudget.create(),
+            )
+        )
+    assert error.value.code == code
+
+
 def test_schedule_crosses_midnight_rounds_up_and_keeps_return_time():
     request = TripRequest(
         days=[{"start_at": "2026-11-25T23:00:00+08:00", "end_at": "2026-11-26T02:00:00+08:00"}],

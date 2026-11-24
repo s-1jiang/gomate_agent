@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     default_city: str = ""
     map_timeout_seconds: float = Field(default=10, gt=0, le=30)
     amap_min_interval_seconds: float = Field(default=1.1, ge=0, le=5)
+    transit_walk_fallback_meters: int = Field(default=2000, ge=0, le=5000)
     max_review_rounds: int = Field(default=2, ge=0, le=2)
     tavily_api_key: SecretStr = SecretStr("")
     web_search_timeout_seconds: float = Field(default=12, gt=0, le=30)

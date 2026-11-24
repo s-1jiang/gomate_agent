@@ -65,6 +65,21 @@ it("labels the first stop as the start of the visit when no departure point was 
   expect(screen.getByText(/09:00 开始游玩/)).toBeVisible();
 });
 
+it("shows each actual transport mode and walking directions in a mixed itinerary", async () => {
+  const mixed = structuredClone(result);
+  const leg = mixed.itinerary!.days[0].legs[1];
+  Object.assign(leg, { mode: "walking", distance_meters: 1418, walking_meters: 1418,
+    duration_minutes: 19, duration_seconds: 1134, instructions: ["沿步道走到下一站"] });
+  const user = userEvent.setup();
+  render(<ItineraryAnswer api={new ApiClient("fake")} result={mixed} />);
+  expect(screen.getByText("公共交通 + 步行")).toBeVisible();
+  const travel = screen.getByText("湖畔公园 → 文化公园").closest("article")!;
+  expect(travel).toHaveTextContent("步行");
+  expect(travel).toHaveTextContent("19 分钟 · 1.4 公里");
+  await user.click(within(travel).getByText("交通详情 [T2]"));
+  expect(within(travel).getByText("沿步道走到下一站")).toBeVisible();
+});
+
 it("does not invent connecting route geometry when the provider returned no paths", () => {
   const withoutPaths = structuredClone(result);
   withoutPaths.itinerary!.days[0].legs.forEach((leg) => { leg.paths = []; });

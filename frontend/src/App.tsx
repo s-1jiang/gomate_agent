@@ -941,6 +941,9 @@ function RunStatus({ run }: { run: Run }) {
   else if (run.status === "waiting_user") {
     title = "请补充信息";
     text = "请补充出发时间、地点或预算。";
+  } else if (run.error_code?.startsWith("ROUTE_") || run.error_code?.startsWith("INVALID_ROUTE_")) {
+    title = "交通查询暂时不可用";
+    text = "请稍后重试这次行程。";
   }
   return (
     <div

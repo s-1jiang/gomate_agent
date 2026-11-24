@@ -77,9 +77,11 @@ function JourneyMap({ api, places, day }: { api: ApiClient; places: MapPlace[]; 
 export function ItineraryAnswer({ result, api }: { result: MapSearchResult; api: ApiClient }) {
   const plan = result.itinerary;
   if (!plan) return null;
+  const modes = [...new Set(plan.days.flatMap((day) => day.legs.map((leg) => leg.mode)))];
+  const travelMode = (modes.length ? modes : [plan.request.mode]).map((mode) => transport[mode]).join(" + ");
   return <section className="itinerary-answer" aria-label="完整游玩行程">
     <header><h2>{plan.title}</h2>
-      <div className="itinerary-facts"><span><Clock3 size={14} />{plan.days.length} 天</span><span>{transport[plan.request.mode]}</span>{plan.request.party_size > 1 && <span>{plan.request.party_size} 人</span>}{plan.request.budget_fen !== null && <span>{plan.request.budget_scope === "per_person" ? "人均预算" : "总预算"} ¥{(plan.request.budget_fen / 100).toFixed(0)}</span>}</div>
+      <div className="itinerary-facts"><span><Clock3 size={14} />{plan.days.length} 天</span><span>{travelMode}</span>{plan.request.party_size > 1 && <span>{plan.request.party_size} 人</span>}{plan.request.budget_fen !== null && <span>{plan.request.budget_scope === "per_person" ? "人均预算" : "总预算"} ¥{(plan.request.budget_fen / 100).toFixed(0)}</span>}</div>
     </header>
     {plan.days.map((day, index) => {
       const rows = [...day.stops.map((stop) => ({ at: stop.arrival_at, stop, leg: null })), ...day.legs.map((leg) => ({ at: leg.start_at, leg, stop: null }))].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));

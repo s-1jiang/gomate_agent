@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from datetime import UTC, datetime
 
@@ -11,6 +12,8 @@ from app.schemas.itinerary import RouteObservation
 from app.schemas.maps import SearchArguments
 from app.schemas.planning import Coordinates, Place
 from app.tools.budget import RunBudget
+
+logger = logging.getLogger(__name__)
 
 
 def text_value(value) -> str:
@@ -168,20 +171,71 @@ class AMapClient:
                 response = await client.get(
                     f"https://restapi.amap.com/v5/direction/{endpoints[mode]}", params=params
                 )
-            if response.status_code != 200 or len(response.content) > 4000000:
+            if response.status_code == 429:
+                raise AppError("ROUTE_RATE_LIMITED", "高德路线查询限流，请稍后重试", 503)
+            if response.status_code in {401, 403}:
+                raise AppError("ROUTE_AUTH_FAILED", "高德路线查询权限不可用", 503)
+            if response.status_code >= 500:
                 raise AppError("ROUTE_UNAVAILABLE", "高德路线查询暂时不可用", 503)
+            if response.status_code != 200 or len(response.content) > 4000000:
+                raise AppError("INVALID_ROUTE_OUTPUT", "高德路线返回无效响应", 502)
             payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid route response")
             if str(payload.get("status")) != "1":
                 code = str(payload.get("infocode", ""))
-                if code in {"10003", "10004", "10010", "10019", "10020", "10021", "10044"}:
+                if len(code) == 5 and code.isascii() and code.isdigit():
+                    logger.warning("AMap route rejected: infocode=%s", code)
+                if code in {
+                    "10003",
+                    "10004",
+                    "10010",
+                    "10014",
+                    "10015",
+                    "10019",
+                    "10020",
+                    "10021",
+                    "10029",
+                    "10044",
+                    "10045",
+                    "40000",
+                    "40003",
+                }:
                     raise AppError(
                         "ROUTE_RATE_LIMITED", "高德路线查询限流或配额不足，请稍后重试", 503
                     )
-                raise AppError("ROUTE_UNAVAILABLE", "路线查询失败，请检查高德权限或额度", 503)
-            rows = payload.get("route", {}).get("transits" if mode == "transit" else "paths")
-            if not isinstance(rows, list) or not rows:
+                if code in {
+                    "10001",
+                    "10002",
+                    "10005",
+                    "10006",
+                    "10007",
+                    "10008",
+                    "10009",
+                    "10012",
+                    "10013",
+                    "10026",
+                    "10041",
+                    "20011",
+                    "40002",
+                }:
+                    raise AppError("ROUTE_AUTH_FAILED", "高德路线查询权限不可用", 503)
+                if code in {"20800", "20801", "20802", "20803"}:
+                    raise AppError("ROUTE_NOT_FOUND", "未查到可通行的路线", 422)
+                if code in {"20000", "20001", "20002", "20012"}:
+                    raise AppError("INVALID_ROUTE_ARGUMENT", "高德路线请求参数无效", 502)
+                raise AppError("ROUTE_UNAVAILABLE", "高德路线查询暂时不可用", 503)
+            route = payload.get("route")
+            if not isinstance(route, dict):
+                raise ValueError("Missing route object")
+            rows = route.get("transits" if mode == "transit" else "paths")
+            if not isinstance(rows, list):
+                raise ValueError("Missing route list")
+            if not rows:
                 raise AppError("ROUTE_NOT_FOUND", "两地间没有查到所选交通方式的路线", 422)
             row = rows[0]
+            if not isinstance(row, dict):
+                raise ValueError("Invalid route row")
             distance = int(float(row["distance"]))
             duration = int(float(row["cost"]["duration"]))
             instructions, points, paths = [], [], []
@@ -234,7 +288,9 @@ class AMapClient:
                 source_ref=f"amap:route:{mode}:{origin.poi_id}:{destination.poi_id}",
                 fetched_at=datetime.now(UTC),
             )
-        except (httpx.HTTPError, TimeoutError) as exc:
-            raise AppError("ROUTE_UNAVAILABLE", "路线查询超时或连接失败", 503) from exc
-        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            raise AppError("ROUTE_TIMEOUT", "路线查询超时", 504) from exc
+        except httpx.HTTPError as exc:
+            raise AppError("ROUTE_UNAVAILABLE", "路线查询连接失败", 503) from exc
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
             raise AppError("INVALID_ROUTE_OUTPUT", "高德路线结果缺少有效的耗时或距离", 502) from exc

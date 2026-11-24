@@ -540,6 +540,19 @@ describe("GoMate workspace", () => {
     expect(screen.queryByText("可以先从附近的公园开始。")).not.toBeInTheDocument();
   });
 
+  it("shows transport service failures as a retry instead of blaming the user's locations", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    backend({ runFailure: { code: "ROUTE_AUTH_FAILED", message: "高德路线查询权限不可用" } });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("tester");
+    await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "安排半日游");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByText("交通查询暂时不可用")).toBeVisible();
+    expect(screen.getByText("请稍后重试这次行程。")).toBeVisible();
+    expect(screen.queryByText(/权限不可用|请更换交通方式或补充具体位置/)).not.toBeInTheDocument();
+  });
+
   it("imports text into the chosen knowledge scope and confirms deletion", async () => {
     sessionStorage.setItem("gomate.session", "test-token");
     const { fetchMock, calls } = backend();
