@@ -13,7 +13,7 @@ docker compose up -d --build --wait
 - 接口文档：http://127.0.0.1:8080/docs
 - 健康检查：http://127.0.0.1:8080/health/ready
 
-没有 `.env` 或 API Key 也能启动注册、会话和本地知识库功能；文字聊天需要有效的 DeepSeek Key。需要配置时，将 `.env.example` 复制为 `.env` 后在本机填写；不要覆盖已有密钥文件。
+首次启动需从 `.env.example` 创建 `.env` 并设置随机 `RABBITMQ_PASSWORD`；本机已有配置已补齐。模型和地图 Key 仍是对应功能的独立要求。不要覆盖已有密钥文件。
 根目录 `.env` 中的 `GOMATE_WEB_PORT` 可修改宿主机端口，默认 8080。
 
 ## 服务与数据
@@ -21,10 +21,12 @@ docker compose up -d --build --wait
 | 服务 | 镜像构建 | 容器端口 | 作用 |
 | --- | --- | --- | --- |
 | frontend | Node 24 构建，Nginx 非 root 静态服务 | 8080 | 页面、固定后端代理 |
-| backend | Python 3.13 多阶段构建、非 root 运行 | 8000 | FastAPI、SQLite、单 worker |
+| backend | Python 3.13 多阶段构建、非 root 运行 | 8000 | FastAPI、SQLite、Outbox 发布器 |
+| worker | 与 backend 同一镜像 | 不映射 | 消费 RabbitMQ 并执行 Supervisor 工作流 |
+| rabbitmq | 官方 RabbitMQ 4，持久化卷 | 5672，不映射 | 持久化任务、发布确认与手动 ACK |
 
 浏览器只访问前端地址，`/api/` 和 `/health/` 由 Nginx 转发。后端没有映射到宿主机端口；开发中原有的本机 8000 服务可独立存在。
-前端等待后端健康检查通过再启动。两个容器使用只读根文件系统，临时文件写入 tmpfs。
+前端等待后端健康检查通过再启动，Worker 等待数据库迁移和 RabbitMQ 就绪。前端、API、Worker 使用只读根文件系统和临时 tmpfs；RabbitMQ 使用独立持久化卷。
 
 SQLite 保存在 Compose 命名卷 `gomate_data` 对应的 `/app/data/gomate.db` 中。
 这与本机直接运行时的 `data/gomate.db` 是两个独立数据库，首次在容器中使用需要重新注册账号。
@@ -38,7 +40,7 @@ docker compose start
 docker compose down
 ```
 
-`stop`、`down` 保留命名卷。不要为日常停止服务添加 `-v`，该选项会删除容器数据库。
+`stop`、`down` 保留命名卷。不要为日常停止服务添加 `-v`，该选项会删除容器数据库和 RabbitMQ 队列。后台执行与会话恢复见 [队列说明](RUN_QUEUE.md)。
 备份应使用 SQLite backup API 或停服后导出完整一致的数据，不能在运行中只复制主文件而忽略 WAL。
 
 ## 配置与构建
@@ -46,7 +48,7 @@ docker compose down
 - 后端的运行依赖锁在 `requirements.runtime.lock`，开发测试依赖仍在 `requirements.lock`。
 - 前端的依赖锁在 `frontend/package-lock.json`，镜像使用 `npm ci`。
 - 根目录和前端目录分别提供 `.dockerignore`；源码凭证、Git 元数据、本机数据库、虚拟环境和 node_modules 不进入构建上下文。
-- DeepSeek、高德 Web 服务 Key 只由 Compose 在运行时传入 backend，前端镜像不包含这些密钥。
+- 模型、地图、Tavily 凭证只在运行时传入 API/Worker，前端镜像不包含这些密钥。修改后需重新创建两者，最方便的命令是 `docker compose up -d --force-recreate --wait`。
 - 浏览器保持登录默认 30 天，由 `REMEMBER_TOKEN_TTL_SECONDS` 控制；HTTP 本地访问默认 `AUTH_COOKIE_SECURE=false`，HTTPS 部署应设为 `true`。详见 [登录说明](LOGIN.md)。
 - 高德 JS Key 和安全密钥在运行时传给 backend；前端通过鉴权配置接口读取公开 JS Key，安全密钥由固定样式代理使用。服务端搜索与修改轮数使用同一 Run 预算，见 [地图搜索](MAP_SEARCH.md)。
 - `.env` 的环境变量可通过本机进程环境覆盖；不要把 `docker compose config` 展开的敏感值粘贴到日志或提交中，检查时使用 `docker compose config --quiet`。

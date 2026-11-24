@@ -327,4 +327,4 @@ def test_upgrade_preserves_existing_messages_and_is_repeatable(tmp_path):
         row = connection.execute("SELECT * FROM messages").fetchone()
         assert row["content"] == "old content"
         assert row["sources_json"] == "[]" and row["retrieval_status"] is None
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 4

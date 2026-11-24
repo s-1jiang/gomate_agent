@@ -277,6 +277,9 @@ export class ApiClient {
   run(id: string, signal?: AbortSignal) {
     return this.request<Run>(`/runs/${encodeURIComponent(id)}`, { signal });
   }
+  latestRun(sessionId: string, signal?: AbortSignal) {
+    return this.request<Run | null>(`/conversations/${encodeURIComponent(sessionId)}/runs/latest`, { signal });
+  }
   cancelRun(id: string) {
     return this.request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, {
       method: "POST",

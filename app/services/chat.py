@@ -129,9 +129,9 @@ class ChatService:
         content, sources = attach_sources(content, sources)
         return content, sources, "retrieved" if sources else "no_matches", map_result
 
-    async def run(self, auth: AuthContext, run_id: str) -> None:
+    async def run(self, auth: AuthContext, run_id: str, *, worker_id: str | None = None) -> None:
         repository = RunRepository(self.database, auth)
-        run = await asyncio.to_thread(repository.start, run_id)
+        run = await asyncio.to_thread(repository.start, run_id, worker_id)
         if run is None:
             return
         budget = RunBudget.create(

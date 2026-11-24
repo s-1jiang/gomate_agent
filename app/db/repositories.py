@@ -218,6 +218,10 @@ class RunRepository:
                 (self.auth.user_id, session_id, run_id, deadline),
             )
             row = connection.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if settings.task_execution_mode == "queue":
+                connection.execute(
+                    "INSERT INTO run_jobs(run_id, created_at) VALUES (?, ?)", (run_id, timestamp)
+                )
         return dict(row), True
 
     def get(self, run_id: str) -> dict:
@@ -249,7 +253,17 @@ class RunRepository:
                 ),
             )
 
-    def start(self, run_id: str) -> dict | None:
+    def latest(self, session_id: str) -> dict | None:
+        with self.database.connect() as connection:
+            require_conversation(connection, self.auth, session_id)
+            row = connection.execute(
+                "SELECT id FROM runs WHERE user_id = ? AND session_id = ? "
+                "ORDER BY created_at DESC, id DESC LIMIT 1",
+                (self.auth.user_id, session_id),
+            ).fetchone()
+        return self.get(row["id"]) if row else None
+
+    def start(self, run_id: str, worker_id: str | None = None) -> dict | None:
         with self.database.connect(write=True) as connection:
             row = connection.execute(
                 "SELECT r.*, l.fencing_token FROM runs r JOIN session_leases l "
@@ -270,6 +284,14 @@ class RunRepository:
                 "UPDATE runs SET status = 'running', updated_at = ? WHERE user_id = ? AND id = ?",
                 (now_iso(), self.auth.user_id, run_id),
             )
+            if worker_id:
+                updated = connection.execute(
+                    "UPDATE run_jobs SET worker_id = ?, heartbeat_at = ? "
+                    "WHERE run_id = ? AND worker_id IS NULL",
+                    (worker_id, time.time(), run_id),
+                ).rowcount
+                if updated != 1:
+                    raise AppError("INVALID_JOB_CLAIM", "后台任务领取失败", 409)
         return dict(row)
 
     def active(self, run_id: str, fencing_token: int) -> bool:

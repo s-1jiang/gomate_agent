@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     token_ttl_seconds: int = Field(default=86400, ge=60)
     remember_token_ttl_seconds: int = Field(default=2592000, ge=60, le=7776000)
     auth_cookie_secure: bool = False
+    task_execution_mode: Literal["inline", "queue"] = "inline"
+    rabbitmq_host: str = "127.0.0.1"
+    rabbitmq_port: int = Field(default=5672, ge=1, le=65535)
+    rabbitmq_user: str = "gomate"
+    rabbitmq_password: SecretStr = SecretStr("")
+    rabbitmq_vhost: str = "/"
+    rabbitmq_queue: str = Field(default="gomate.runs.v1", pattern=r"^[A-Za-z0-9_.-]{1,100}$")
+    worker_concurrency: int = Field(default=2, ge=1, le=4)
+    worker_stale_seconds: int = Field(default=30, ge=15, le=120)
     login_max_attempts: int = Field(default=5, ge=1)
     login_window_seconds: int = Field(default=300, ge=1)
     run_timeout_seconds: int = Field(default=240, gt=0)

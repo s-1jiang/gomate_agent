@@ -83,6 +83,9 @@ export default function App() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [currentRun, setCurrentRun] = useState<Run | null>(null);
+  const [trackedRuns, setTrackedRuns] = useState<Record<string, Run>>({});
+  const trackedRef = useRef<Record<string, Run>>({});
+  const [recoveringRun, setRecoveringRun] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
@@ -111,6 +114,12 @@ export default function App() {
   } | null>(null);
   const draftKey = selected || "new";
   const draft = drafts[draftKey] || "";
+  const rememberRun = useCallback((run: Run, expectedId?: string) => {
+    if (expectedId && trackedRef.current[run.session_id]?.id !== expectedId) return;
+    trackedRef.current = { ...trackedRef.current, [run.session_id]: run };
+    setTrackedRuns(trackedRef.current);
+    if (selectedRef.current === run.session_id) setCurrentRun(run);
+  }, []);
 
   const clearSession = useCallback(() => {
     setKnowledgeOpen(false);
@@ -123,6 +132,9 @@ export default function App() {
     setMessages([]);
     setDrafts({});
     setCurrentRun(null);
+    trackedRef.current = {};
+    setTrackedRuns({});
+    setRecoveringRun(false);
     setHasMore(false);
     setCity("");
     setQuery("");
@@ -245,6 +257,32 @@ export default function App() {
   }, [api, selected, user?.id, handleError, historyVersion]);
 
   useEffect(() => {
+    if (!selected || !user) { setRecoveringRun(false); return; }
+    const controller = new AbortController();
+    const sessionId = selected;
+    const version = epoch.current;
+    const cached = trackedRef.current[sessionId];
+    setRecoveringRun(true);
+    api.latestRun(sessionId, controller.signal).then((run) => {
+      if (controller.signal.aborted || version !== epoch.current || selectedRef.current !== sessionId) return;
+      // A poll or send may have obtained a newer snapshot while this request was pending.
+      if (trackedRef.current[sessionId] !== cached) return;
+      if (run) rememberRun(run);
+      else if (!cached) setCurrentRun(null);
+    }).catch((error) => { if (!controller.signal.aborted) handleError(error); })
+      .finally(() => { if (!controller.signal.aborted) setRecoveringRun(false); });
+    return () => controller.abort();
+  }, [api, selected, user?.id, handleError, rememberRun, historyVersion]);
+
+  useEffect(() => {
+    if (!selected || !user) return;
+    const refresh = () => { if (document.visibilityState !== "hidden") setHistoryVersion((value) => value + 1); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [selected, user?.id]);
+
+  useEffect(() => {
     if (!currentRun || isActiveRun(currentRun) || currentRun.session_id !== selected) return;
     const controller = new AbortController();
     const run = currentRun;
@@ -269,38 +307,43 @@ export default function App() {
     }
   }, [draft]);
 
+  const activeRunKey = Object.values(trackedRuns).filter(isActiveRun).map((run) => `${run.id}:${run.status}`).sort().join("|");
   useEffect(() => {
-    if (!currentRun || !isActiveRun(currentRun)) return;
+    if (!activeRunKey) return;
     const controller = new AbortController();
-    const runId = currentRun.id;
+    const version = epoch.current;
     let timer: ReturnType<typeof setTimeout>;
-    const started = Date.now();
     async function poll() {
-      try {
-        const run = await api.run(runId, controller.signal);
-        if (controller.signal.aborted) return;
-        setCurrentRun(run);
-        if (isActiveRun(run) && Date.now() - started < 130000)
-          timer = setTimeout(poll, 1000);
-        else if (isActiveRun(run))
-          setNotice("任务仍在处理中，可以稍后重新打开会话查看。");
-      } catch (error) {
-        if (!controller.signal.aborted) handleError(error);
-      }
+      const pendingRuns = Object.values(trackedRef.current).filter(isActiveRun);
+      await Promise.all(pendingRuns.map(async (previous) => {
+        try {
+          const run = await api.run(previous.id, controller.signal);
+          if (controller.signal.aborted || version !== epoch.current) return;
+          rememberRun(run, previous.id);
+          setNotice((notice) => notice === "进度连接暂时中断，正在自动重试。" ? "" : notice);
+        } catch (error) {
+          if (controller.signal.aborted || version !== epoch.current) return;
+          if (error instanceof ApiError && error.status === 401) handleError(error);
+          else if (selectedRef.current === previous.session_id) setNotice("进度连接暂时中断，正在自动重试。");
+        }
+      }));
+      if (!controller.signal.aborted && version === epoch.current && Object.values(trackedRef.current).some(isActiveRun))
+        timer = setTimeout(poll, 1000);
     }
     timer = setTimeout(poll, 250);
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [api, currentRun?.id, currentRun?.status, handleError]);
+  }, [api, activeRunKey, handleError, rememberRun]);
 
   function selectConversation(id: string | null) {
     selectedRef.current = id;
     setSelected(id);
     setSidebarOpen(false);
     setNotice("");
-    setCurrentRun(null);
+    setCurrentRun(id ? trackedRef.current[id] || null : null);
+    setRecoveringRun(!!id && !!user);
     if (id === null) {
       setMessages([]);
       setCurrentRun(null);
@@ -331,7 +374,7 @@ export default function App() {
   async function send(event?: FormEvent, contentOverride?: string) {
     event?.preventDefault();
     const messageDraft = contentOverride ?? draft;
-    if (!messageDraft.trim() || sending || checking || isActiveRun(currentRun) || historyLoading)
+    if (!messageDraft.trim() || sending || checking || isActiveRun(currentRun) || historyLoading || recoveringRun)
       return;
     if (!user) {
       setAuthOpen(true);
@@ -371,6 +414,7 @@ export default function App() {
       );
       if (version !== epoch.current) return;
       pending.current = null;
+      rememberRun(run);
       if (!contentOverride) setDrafts((items) => ({ ...items, [originalKey]: "", [sessionId!]: "" }));
       const ownMessage: Message = {
         id: run.message_id,
@@ -385,7 +429,6 @@ export default function App() {
             ? items
             : [...items, ownMessage],
         );
-        setCurrentRun(run);
       }
     } catch (error) {
       if (version === epoch.current) handleError(error);
@@ -410,8 +453,7 @@ export default function App() {
     setCancelling(true);
     try {
       const run = await api.cancelRun(currentRun.id);
-      if (version === epoch.current && selectedRef.current === run.session_id)
-        setCurrentRun(run);
+      if (version === epoch.current) rememberRun(run, run.id);
     } catch (error) {
       if (version === epoch.current) handleError(error);
     } finally {
@@ -429,6 +471,10 @@ export default function App() {
         items.filter((item) => item.id !== deleting.id),
       );
       if (selected === deleting.id) selectConversation(null);
+      const remaining = { ...trackedRef.current };
+      delete remaining[deleting.id];
+      trackedRef.current = remaining;
+      setTrackedRuns(remaining);
       setDrafts((items) => {
         const next = { ...items };
         delete next[deleting.id];
@@ -551,7 +597,7 @@ export default function App() {
                   <MessageCircle size={17} />
                   <span>
                     <strong>{item.title}</strong>
-                    <small>{timeLabel(item.created_at)}</small>
+                    <small>{isActiveRun(trackedRuns[item.id] || null) ? (trackedRuns[item.id].status === "queued" ? "排队中" : "正在生成") : timeLabel(item.created_at)}</small>
                   </span>
                 </button>
                 <button
@@ -764,7 +810,7 @@ export default function App() {
                         type="submit"
                         aria-label={user ? "发送消息" : "登录后发送"}
                         disabled={
-                          !draft.trim() || sending || checking || historyLoading
+                          !draft.trim() || sending || checking || historyLoading || recoveringRun
                         }
                       >
                         {sending ? (
@@ -796,7 +842,7 @@ export default function App() {
             city={city}
             result={[...messages].reverse().find((message) => message.map_result)?.map_result || null}
             signedIn={!!user}
-            busy={active || sending || checking || historyLoading}
+            busy={active || sending || checking || historyLoading || recoveringRun}
             onError={handleError}
             onSearch={(keyword, nextCity) => { setCity(nextCity); void send(undefined, `城市：${nextCity}\n请在地图上搜索：${keyword}`); }}
             mobile={planOpen}

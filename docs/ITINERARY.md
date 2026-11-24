@@ -36,7 +36,7 @@ CHAT_MAX_OUTPUT_TOKENS=4096
 DEEPSEEK_THINKING=disabled
 ```
 
-然后运行 `docker compose up -d --force-recreate backend`，再运行 `docker compose restart frontend` 刷新代理的后端地址。首次更新代码使用 `docker compose up -d --build --wait`。
+然后运行 `docker compose up -d --force-recreate --wait`，让 API 和执行任务的 Worker 都读取新配置，并刷新前端代理。首次更新代码使用 `docker compose up -d --build --wait`。
 
 Compose 将密钥传给后端，前端不接收 Tavily Key。适配器固定请求 `https://api.tavily.com/search`，basic 模式、每个候选最多三条、关闭生成答案与原始网页抓取。未配置、无结果、鉴权或限流失败时继续生成带明确提示的建议；预算/取消/Run 超时不能因此被绕过。
 

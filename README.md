@@ -7,6 +7,7 @@
 ## Docker 一键打开
 
 Docker Desktop 使用 Linux containers，启动后执行：
+首次部署先从 `.env.example` 创建 `.env` 并设置随机 `RABBITMQ_PASSWORD`；已有本机配置已补齐。
 
 ```powershell
 cd D:\test\gomate_agent
@@ -46,7 +47,7 @@ npm.cmd run dev
 
 打开 http://127.0.0.1:5173。前端开发代理默认转发到本机 8000，无需额外配置跨域。
 
-当前聊天运行器在进程内执行，**仅支持单个 Uvicorn worker**。启动会把上个进程遗留的 queued/running 任务标记为 interrupted；不要用多个进程共享此运行器。
+Docker 通过 RabbitMQ 和独立 Worker 执行任务，API 重启与网页会话切换不会取消生成。消息和任务使用事务 Outbox，完成结果保存到 SQLite，再由前端恢复。原生开发默认 inline 单进程调试；两种模式的配置和重启行为见 [后台队列](docs/RUN_QUEUE.md)。
 
 ## 已有能力
 
@@ -111,7 +112,9 @@ app/
   memory/ retrieval/       画像和私有检索的扩展入口
   planning/ tools/         基础约束、预算与可信上下文
   integrations/            DeepSeek 适配器、地图供应商契约
-  mcp_servers/ jobs/ web/   后续协议、后台任务及页面入口
+  jobs/                    RabbitMQ、事务 Outbox 与任务归属/心跳
+  worker.py                独立任务消费者入口
+  mcp_servers/ web/        后续协议及页面入口
   observability/           脱敏请求日志
 tests/                     unit、integration、isolation、mcp
 frontend/                  React / TypeScript / Vite 页面与测试

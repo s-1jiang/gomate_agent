@@ -1,1 +1,1 @@
-"""Reserved for durable SQLite jobs and profile/knowledge consumers."""
+"""Transactional run outbox and RabbitMQ delivery adapters."""

@@ -44,10 +44,16 @@ function backend({
   runFailure = null as { code: string; message: string } | null,
   cookieSession = false,
   replyMap = null as MapSearchResult | null,
+  runPending = false,
+  initialRun = null as Run | null,
+  failFirstPoll = false,
 } = {}) {
   let signedInCookie = cookieSession;
   let conversations = [...initial];
   const messages: Message[] = [];
+  let latest: Run | null = initialRun;
+  let hold = runPending;
+  let polls = 0;
   const sendBodies: { content: string; client_message_id: string }[] = [];
   const calls: { path: string; options?: RequestInit }[] = [];
   const fetchMock = vi.fn(
@@ -80,6 +86,7 @@ function backend({
         conversations = [SESSION, ...conversations];
         return response(SESSION, 201);
       }
+      if (path.endsWith("/runs/latest")) return response(latest);
       if (path.endsWith("/messages") && method === "POST") {
         const body = JSON.parse(String(options?.body));
         sendBodies.push(body);
@@ -92,10 +99,14 @@ function backend({
           client_message_id: body.client_message_id,
           created_at: RUN.created_at,
         });
+        latest = RUN;
         return response(RUN, 202);
       }
       if (path.includes("/messages?")) return response(messages);
       if (path === "/api/v1/runs/run-1") {
+        polls += 1;
+        if (failFirstPoll && polls === 1) throw new TypeError("Progress temporarily offline");
+        if (hold) { latest = { ...RUN, status: "running" }; return response(latest); }
         if (!runFailure && !messages.some((item) => item.id === "reply-1")) {
           messages.push({
             id: "reply-1", role: "assistant", content: replyText,
@@ -104,8 +115,9 @@ function backend({
             map_result: replyMap,
           });
         }
-        return response({ ...RUN, status: runFailure ? "failed" : "succeeded",
-          error_code: runFailure?.code || null, error_message: runFailure?.message || null });
+        latest = { ...RUN, status: runFailure ? "failed" : "succeeded",
+          error_code: runFailure?.code || null, error_message: runFailure?.message || null };
+        return response(latest);
       }
       if (path.startsWith("/api/v1/conversations/") && method === "DELETE") {
         conversations = conversations.filter((item) => !path.endsWith(item.id));
@@ -115,7 +127,7 @@ function backend({
     },
   );
   vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, calls, sendBodies };
+  return { fetchMock, calls, sendBodies, finish: () => { hold = false; } };
 }
 
 beforeEach(() => {
@@ -123,6 +135,56 @@ beforeEach(() => {
 });
 
 describe("GoMate workspace", () => {
+  it("keeps generating while viewing another conversation and resumes its answer on return", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const other = { ...SESSION, id: "session-2", title: "另一段对话" };
+    const server = backend({ initial: [SESSION, other], runPending: true, replyText: "第一段后台完成的回答" });
+    const original = server.fetchMock.getMockImplementation()!;
+    server.fetchMock.mockImplementation((path, options) => {
+      if (path.startsWith("/api/v1/conversations/session-2/"))
+        return Promise.resolve(response(path.endsWith("/runs/latest") ? null : []));
+      return original(path, options);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "打开会话：周末的想法" }));
+    await user.type(screen.getByRole("textbox", { name: "输入出行需求" }), "在后台生成");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await screen.findByRole("button", { name: "取消当前任务" });
+    await user.click(screen.getByRole("button", { name: "打开会话：另一段对话" }));
+    expect(screen.queryByRole("button", { name: "取消当前任务" })).not.toBeInTheDocument();
+    server.finish();
+    await waitFor(() => expect(server.calls.filter((call) => call.path === "/api/v1/runs/run-1").length).toBeGreaterThan(0), { timeout: 3000 });
+    expect(screen.queryByText("第一段后台完成的回答")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "打开会话：周末的想法" }));
+    expect(await screen.findByText("第一段后台完成的回答", {}, { timeout: 3000 })).toBeVisible();
+    expect(server.calls.some((call) => call.path.endsWith("/cancel"))).toBe(false);
+  });
+
+  it("recovers a running job from the server after opening a conversation in a fresh page", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const server = backend({ initial: [SESSION], initialRun: { ...RUN, status: "running" }, runPending: true });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "打开会话：周末的想法" }));
+    expect(await screen.findByRole("button", { name: "取消当前任务" })).toBeVisible();
+    expect(server.calls.some((call) => call.path.endsWith("/runs/latest"))).toBe(true);
+    server.finish();
+    expect(await screen.findByText("可以先从附近的公园开始。", {}, { timeout: 3000 })).toBeVisible();
+    expect(server.sendBodies).toHaveLength(0);
+  });
+
+  it("reconnects progress polling after a temporary network failure without resending the message", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    const server = backend({ initial: [SESSION], initialRun: { ...RUN, status: "running" }, failFirstPoll: true });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "打开会话：周末的想法" }));
+    await screen.findByText("进度连接暂时中断，正在自动重试。");
+    expect(await screen.findByText("可以先从附近的公园开始。", {}, { timeout: 3000 })).toBeVisible();
+    expect(screen.queryByText("进度连接暂时中断，正在自动重试。")).not.toBeInTheDocument();
+    expect(server.sendBodies).toHaveLength(0);
+  });
   it("shows a persisted complete itinerary inline instead of a duplicate plain text answer", async () => {
     sessionStorage.setItem("gomate.session", "test-token");
     backend({ initial: [SESSION], replyText: "RAW_ITINERARY_FALLBACK", replyMap: itineraryFixture as unknown as MapSearchResult });

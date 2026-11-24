@@ -13,7 +13,7 @@ def test_health_openapi_and_migration_are_ready(client):
     assert "/api/v1/runs/{run_id}" in client.get("/openapi.json").json()["paths"]
     client.app.state.database.migrate()
     with client.app.state.database.connect() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 4
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
 

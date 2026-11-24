@@ -49,3 +49,5 @@ jobs:
       - run: npm run build
       - run: docker compose config --quiet
         working-directory: .
+        env:
+          RABBITMQ_PASSWORD: ci-compose-validation-only

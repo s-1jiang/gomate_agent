@@ -2,10 +2,16 @@ name: gomate
 
 services:
   backend:
-    build:
+    image: gomate-backend
+    build: &python-build
       context: .
       dockerfile: Dockerfile
-    environment:
+    environment: &runtime-env
+      TASK_EXECUTION_MODE: queue
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: gomate
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       DATABASE_PATH: /app/data/gomate.db
       TOKEN_TTL_SECONDS: ${TOKEN_TTL_SECONDS:-86400}
       REMEMBER_TOKEN_TTL_SECONDS: ${REMEMBER_TOKEN_TTL_SECONDS:-2592000}
@@ -43,6 +49,52 @@ services:
     cap_drop: [ALL]
     networks: [app]
 
+  worker:
+    image: gomate-backend
+    build: *python-build
+    command: ["python", "-m", "app.worker"]
+    environment: *runtime-env
+    volumes:
+      - gomate_data:/app/data
+    depends_on:
+      backend:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; assert time.time()-pathlib.Path('/tmp/gomate-worker-heartbeat').stat().st_mtime<30"]
+      interval: 10s
+      timeout: 4s
+      start_period: 15s
+      retries: 3
+    networks: [app]
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    user: rabbitmq
+    hostname: gomate-rabbitmq
+    environment:
+      RABBITMQ_NODENAME: rabbit@gomate-rabbitmq
+      RABBITMQ_DEFAULT_USER: gomate
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    networks: [app]
+
   frontend:
     build:
       context: ./frontend
@@ -63,6 +115,7 @@ services:
 
 volumes:
   gomate_data:
+  rabbitmq_data:
 
 networks:
   app:

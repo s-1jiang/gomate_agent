@@ -33,10 +33,14 @@ Limit = Annotated[int, Query(ge=1, le=100)]
 
 
 @router.get("/capabilities", tags=["system"])
-def capabilities():
+def capabilities(request: Request):
     return {
         "version": __version__,
         "stage": "supervisor_itinerary",
+        "task_execution_mode": request.app.state.settings.task_execution_mode,
+        "task_queue": "rabbitmq"
+        if request.app.state.settings.task_execution_mode == "queue"
+        else None,
         "available": [
             "auth",
             "conversations",
@@ -166,9 +170,15 @@ def send_message(
         body.content,
         request.app.state.settings,
     )
-    if created:
+    if created and request.app.state.settings.task_execution_mode == "inline":
         background_tasks.add_task(request.app.state.chat.run, user, run["id"])
     return run
+
+
+@router.get("/conversations/{session_id}/runs/latest", response_model=RunOut | None, tags=["runs"])
+def latest_run(session_id: str, response: Response, database: DatabaseDep, user: CurrentUser):
+    response.headers["Cache-Control"] = "no-store"
+    return RunRepository(database, user).latest(session_id)
 
 
 @router.get("/runs/{run_id}", response_model=RunOut, tags=["runs"])

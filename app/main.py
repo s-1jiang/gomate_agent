@@ -15,6 +15,7 @@ from app.db.database import Database
 from app.db.repositories import interrupt_pending_runs
 from app.integrations.deepseek import DeepSeekClient
 from app.integrations.map_style import MapStyleProxy
+from app.jobs.dispatcher import QueueDispatcher
 from app.observability.http import request_context
 from app.services.chat import ChatService
 
@@ -27,10 +28,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.migrate()
-        interrupt_pending_runs(database)
+        if config.task_execution_mode == "inline":
+            interrupt_pending_runs(database)
+        else:
+            application.state.dispatcher = QueueDispatcher(database, config)
+            application.state.dispatcher.start()
         try:
             yield
         finally:
+            if config.task_execution_mode == "queue":
+                await application.state.dispatcher.close()
             await chat.close()
 
     application = FastAPI(
@@ -91,7 +98,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ready():
         with database.connect() as connection:
             connection.execute("SELECT version FROM schema_migrations LIMIT 1").fetchone()
-        return {"status": "ok", "database": "sqlite"}
+        result = {
+            "status": "ok",
+            "database": "sqlite",
+            "task_execution_mode": config.task_execution_mode,
+        }
+        if config.task_execution_mode == "queue":
+            result["outbox_dispatcher"] = application.state.dispatcher.state
+        return result
 
     application.include_router(router)
     application.include_router(maps_router)
