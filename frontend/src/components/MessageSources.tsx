@@ -4,6 +4,7 @@ export function MessageSources({ message }: { message: Message }) {
   if (message.role !== "assistant") return null;
   const sources = message.sources || [];
   if (!sources.length) {
+    if (message.map_result) return null;
     return message.retrieval_status === "no_matches" ? (
       <small className="source-note">未检索到相关资料，本次回复由模型生成。</small>
     ) : null;

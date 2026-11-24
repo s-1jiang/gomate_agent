@@ -44,7 +44,7 @@ DeepSeek 理解偏好、提取条件、选择工具、解释结果；地图服�
 
 第一版聚焦一个城市和“步行 + 公交”，驾车作为后续扩展。天气超出供应商可用日期范围时明确未知。天气与营业时间不能用模型补造。
 
-`app/integrations/amap.py` 已实现 POI 2.0 城市关键词搜索；下属 Agent 通过 `MapToolGateway` 调用，Supervisor 本身没有地图工具权限。模型审查只选择已观测候选，不能生成新的 POI。`Place / Coordinates / RouteLeg` 仍为归一化契约，位置解析、周边和路线适配后续实现。
+`app/integrations/amap.py` 已实现 POI 2.0 城市关键词搜索及路径规划2.0的步行/驾车/公交查询。下属 Agent 通过 `MapToolGateway` 调用，Supervisor 本身没有地图工具权限。审查只选择已观测候选，不能生成新的 POI。Tavily 作为可选资料源，配置和字段见 [同城行程](ITINERARY.md)；周边、天气及跨城暂未实现。
 
 - 对中国大陆地图链路统一使用并标注 `GCJ02`；外部 GPS/WGS84 坐标先经受控转换，禁止混用。
 - 保留 provider + POI ID、数据采集时间和来源；地点同名需要城市/用户确认，不能随意取第一项。

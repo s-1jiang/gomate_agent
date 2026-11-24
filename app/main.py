@@ -37,7 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=config.app_name,
         version=__version__,
         lifespan=lifespan,
-        description="GoMate：Supervisor 地点搜索、文字聊天和可追溯来源。路线规划尚未接入。",
+        description="GoMate：Supervisor 同城行程规划、地点搜索、文字聊天与可追溯来源。",
     )
     application.state.settings = config
     application.state.database = database

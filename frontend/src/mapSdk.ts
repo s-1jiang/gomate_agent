@@ -1,8 +1,8 @@
 import type { MapConfig } from "./api";
 
 export interface MapInstance {
-  add(markers: MarkerInstance[]): void;
-  remove(markers: MarkerInstance[]): void;
+  add(markers: object[]): void;
+  remove(markers: object[]): void;
   setFitView(markers: MarkerInstance[], immediately: boolean, padding: number[], maxZoom: number): void;
   setZoomAndCenter(zoom: number, center: number[]): void;
   destroy(): void;
@@ -11,6 +11,7 @@ export interface MarkerInstance { on(name: string, handler: () => void): void; }
 export interface AMapSdk {
   Map: new (container: HTMLElement, options: Record<string, unknown>) => MapInstance;
   Marker: new (options: Record<string, unknown>) => MarkerInstance;
+  Polyline?: new (options: Record<string, unknown>) => object;
 }
 declare global {
   interface Window {

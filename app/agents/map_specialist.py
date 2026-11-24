@@ -19,6 +19,33 @@ def structured_reply(raw: str, schema):
         raise AppError("INVALID_AGENT_OUTPUT", "Agent 返回的任务数据格式不合法", 502) from exc
 
 
+async def structured_complete(model, prompt, budget, schema):
+    raw = await model.complete(prompt, budget, json_mode=True)
+    try:
+        return structured_reply(raw, schema)
+    except AppError as exc:
+        if exc.code != "INVALID_AGENT_OUTPUT":
+            raise
+    # One format correction only. It shares the Run's original counters and deadline.
+    corrected = await model.complete(
+        [
+            *prompt,
+            ChatMessage(role="assistant", content=raw),
+            ChatMessage(
+                role="user",
+                content=(
+                    "上一次输出未符合数据结构。请仅修正格式与字段，保持原始需求和已提供的来源。"
+                    "只输出合法 JSON，不输出解释。必须严格符合以下 JSON Schema：\n"
+                    + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+                ),
+            ),
+        ],
+        budget,
+        json_mode=True,
+    )
+    return structured_reply(corrected, schema)
+
+
 @dataclass(frozen=True)
 class MapTask:
     id: str
@@ -42,6 +69,8 @@ class MapSpecialist:
                     "不能分派其他 Agent。"
                     "根据 Supervisor 的任务和修改反馈制定一次搜索参数。只输出 JSON："
                     '{"keyword":"不超过80字符的单个关键词","city":"指定城市","limit":5}。'
+                    "keyword 使用简短地点名或地点类别，如西湖、浙江省博物馆、西湖餐厅。"
+                    "不要把人数、预算、交通方式、游玩理由拼进地点关键词。"
                     "城市必须保持任务城市不变。不得编造地点、坐标、营业或价格，不输出推理过程。"
                 ),
             ),
@@ -60,9 +89,7 @@ class MapSpecialist:
                 ),
             ),
         ]
-        args = structured_reply(
-            await self.model.complete(prompt, budget, json_mode=True), SearchArguments
-        )
+        args = await structured_complete(self.model, prompt, budget, SearchArguments)
         if args.city != task.city:
             raise AppError("AGENT_SCOPE_CHANGED", "子 Agent 不能修改任务城市", 502)
         places = await self.gateway.search(context, args, budget)

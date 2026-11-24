@@ -1,0 +1,419 @@
+{
+  "status": "approved",
+  "city": "杭州市",
+  "places": [
+    {
+      "provider": "amap",
+      "poi_id": "A",
+      "name": "湖畔公园",
+      "city_code": "0571",
+      "location": {
+        "longitude": 120.15,
+        "latitude": 30.25,
+        "coordinate_system": "GCJ02"
+      },
+      "source_ref": "amap:poi:A",
+      "fetched_at": "2026-11-24T05:59:09.724157Z",
+      "address": "示例路",
+      "city": "杭州市",
+      "district": "",
+      "category": "风景名胜",
+      "label": "M1",
+      "task_id": "task-1",
+      "agent": "activity"
+    },
+    {
+      "provider": "amap",
+      "poi_id": "B",
+      "name": "文化公园",
+      "city_code": "0571",
+      "location": {
+        "longitude": 120.2,
+        "latitude": 30.25,
+        "coordinate_system": "GCJ02"
+      },
+      "source_ref": "amap:poi:B",
+      "fetched_at": "2026-11-24T05:59:09.724157Z",
+      "address": "示例路",
+      "city": "杭州市",
+      "district": "",
+      "category": "风景名胜",
+      "label": "M2",
+      "task_id": "task-1",
+      "agent": "activity"
+    }
+  ],
+  "review_rounds": 0,
+  "events": [
+    {
+      "stage": "route",
+      "agent": "supervisor",
+      "task_id": null,
+      "task_version": null,
+      "summary": "Supervisor 正在分析需求"
+    },
+    {
+      "stage": "dispatch",
+      "agent": "supervisor",
+      "task_id": "task-1",
+      "task_version": 1,
+      "summary": "分派给 activity Agent：轻松半日游"
+    },
+    {
+      "stage": "search",
+      "agent": "activity",
+      "task_id": "task-1",
+      "task_version": 1,
+      "summary": "已完成地点查询，获得 2 个候选"
+    },
+    {
+      "stage": "review",
+      "agent": "supervisor",
+      "task_id": null,
+      "task_version": null,
+      "summary": "Supervisor 正在审查第 1 轮结果"
+    },
+    {
+      "stage": "complete",
+      "agent": "supervisor",
+      "task_id": null,
+      "task_version": null,
+      "summary": "审查已完成，选出 2 个地点"
+    },
+    {
+      "stage": "dispatch",
+      "agent": "supervisor",
+      "task_id": null,
+      "task_version": null,
+      "summary": "分派给 places Agent：确认出发点 杭州东站"
+    },
+    {
+      "stage": "research",
+      "agent": "activity",
+      "task_id": null,
+      "task_version": null,
+      "summary": "正在检索 湖畔公园 的玩法与实用资料"
+    },
+    {
+      "stage": "research",
+      "agent": "activity",
+      "task_id": null,
+      "task_version": null,
+      "summary": "正在检索 文化公园 的玩法与实用资料"
+    },
+    {
+      "stage": "dispatch",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 1,
+      "summary": "分派给 itinerary Agent：安排时间、玩法、餐饮和路线"
+    },
+    {
+      "stage": "validate",
+      "agent": "itinerary",
+      "task_id": "itinerary",
+      "task_version": 1,
+      "summary": "正在查询交通并计算到达、停留和结束时间"
+    },
+    {
+      "stage": "travel",
+      "agent": "itinerary",
+      "task_id": null,
+      "task_version": null,
+      "summary": "查询 杭州东站 → 湖畔公园 的交通"
+    },
+    {
+      "stage": "travel",
+      "agent": "itinerary",
+      "task_id": null,
+      "task_version": null,
+      "summary": "查询 湖畔公园 → 文化公园 的交通"
+    },
+    {
+      "stage": "travel",
+      "agent": "itinerary",
+      "task_id": null,
+      "task_version": null,
+      "summary": "查询 文化公园 → 杭州东站 的交通"
+    },
+    {
+      "stage": "review",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 1,
+      "summary": "审查完整行程、玩法和时间衔接"
+    },
+    {
+      "stage": "revise",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 1,
+      "summary": "退回行程 Agent：保留第一站，明确留出休息"
+    },
+    {
+      "stage": "dispatch",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 2,
+      "summary": "分派给 itinerary Agent：安排时间、玩法、餐饮和路线"
+    },
+    {
+      "stage": "validate",
+      "agent": "itinerary",
+      "task_id": "itinerary",
+      "task_version": 2,
+      "summary": "正在查询交通并计算到达、停留和结束时间"
+    },
+    {
+      "stage": "review",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 2,
+      "summary": "审查完整行程、玩法和时间衔接"
+    },
+    {
+      "stage": "complete",
+      "agent": "supervisor",
+      "task_id": "itinerary",
+      "task_version": 2,
+      "summary": "完整行程已通过时间校验与 Supervisor 审查"
+    }
+  ],
+  "searched_at": "2026-11-24T05:59:09.737237Z",
+  "itinerary": {
+    "title": "杭州半日安排",
+    "summary": "两站慢游，留出返程时间。费用待核实。",
+    "timezone": "Asia/Shanghai",
+    "request": {
+      "days": [
+        {
+          "start_at": "2026-11-25T09:00:00+08:00",
+          "end_at": "2026-11-25T13:00:00+08:00"
+        }
+      ],
+      "origin_name": "杭州东站",
+      "return_to_origin": true,
+      "mode": "transit",
+      "party_size": 2,
+      "budget_fen": null,
+      "budget_scope": "per_person",
+      "max_walking_meters": null,
+      "buffer_minutes": 10,
+      "assumptions": [
+        "每段交通额外预留10分钟缓冲"
+      ],
+      "requirements": []
+    },
+    "origin": {
+      "provider": "amap",
+      "poi_id": "O",
+      "name": "杭州东站",
+      "city_code": "0571",
+      "location": {
+        "longitude": 120.1,
+        "latitude": 30.25,
+        "coordinate_system": "GCJ02"
+      },
+      "source_ref": "amap:poi:O",
+      "fetched_at": "2026-11-24T05:59:09.743205Z",
+      "address": "示例路",
+      "city": "杭州市",
+      "district": "",
+      "category": "风景名胜"
+    },
+    "days": [
+      {
+        "start_at": "2026-11-25T09:00:00+08:00",
+        "deadline": "2026-11-25T13:00:00+08:00",
+        "finish_at": "2026-11-25T12:45:00+08:00",
+        "spare_minutes": 15,
+        "stops": [
+          {
+            "poi_id": "A",
+            "duration_minutes": 75,
+            "kind": "visit",
+            "reason": "安排慢走和休息，减少赶路。",
+            "activities": [
+              {
+                "text": "沿步道散步拍照",
+                "evidence_ids": [
+                  "W1"
+                ]
+              },
+              {
+                "text": "找合适的位置坐一会儿",
+                "evidence_ids": []
+              }
+            ],
+            "practical_info": [
+              {
+                "text": "出发前确认开放与预约",
+                "evidence_ids": []
+              }
+            ],
+            "label": "M1",
+            "name": "湖畔公园",
+            "arrival_at": "2026-11-25T09:30:00+08:00",
+            "departure_at": "2026-11-25T10:45:00+08:00"
+          },
+          {
+            "poi_id": "B",
+            "duration_minutes": 60,
+            "kind": "visit",
+            "reason": "安排慢走和休息，减少赶路。",
+            "activities": [
+              {
+                "text": "沿步道散步拍照",
+                "evidence_ids": [
+                  "W2"
+                ]
+              },
+              {
+                "text": "找合适的位置坐一会儿",
+                "evidence_ids": []
+              }
+            ],
+            "practical_info": [
+              {
+                "text": "出发前确认开放与预约",
+                "evidence_ids": []
+              }
+            ],
+            "label": "M2",
+            "name": "文化公园",
+            "arrival_at": "2026-11-25T11:15:00+08:00",
+            "departure_at": "2026-11-25T12:15:00+08:00"
+          }
+        ],
+        "legs": [
+          {
+            "origin_poi_id": "O",
+            "destination_poi_id": "A",
+            "mode": "transit",
+            "distance_meters": 2000,
+            "walking_meters": 100,
+            "duration_seconds": 1200,
+            "instructions": [
+              "地铁1号线"
+            ],
+            "paths": [
+              [
+                [
+                  120.1,
+                  30.25
+                ],
+                [
+                  120.15,
+                  30.25
+                ]
+              ]
+            ],
+            "source_ref": "amap:route:transit:O:A",
+            "fetched_at": "2026-11-24T05:59:09.767286Z",
+            "label": "T1",
+            "origin_name": "杭州东站",
+            "destination_name": "湖畔公园",
+            "start_at": "2026-11-25T09:00:00+08:00",
+            "end_at": "2026-11-25T09:30:00+08:00",
+            "duration_minutes": 20,
+            "buffer_minutes": 10
+          },
+          {
+            "origin_poi_id": "A",
+            "destination_poi_id": "B",
+            "mode": "transit",
+            "distance_meters": 2000,
+            "walking_meters": 100,
+            "duration_seconds": 1200,
+            "instructions": [
+              "地铁1号线"
+            ],
+            "paths": [
+              [
+                [
+                  120.15,
+                  30.25
+                ],
+                [
+                  120.2,
+                  30.25
+                ]
+              ]
+            ],
+            "source_ref": "amap:route:transit:A:B",
+            "fetched_at": "2026-11-24T05:59:09.772285Z",
+            "label": "T2",
+            "origin_name": "湖畔公园",
+            "destination_name": "文化公园",
+            "start_at": "2026-11-25T10:45:00+08:00",
+            "end_at": "2026-11-25T11:15:00+08:00",
+            "duration_minutes": 20,
+            "buffer_minutes": 10
+          },
+          {
+            "origin_poi_id": "B",
+            "destination_poi_id": "O",
+            "mode": "transit",
+            "distance_meters": 2000,
+            "walking_meters": 100,
+            "duration_seconds": 1200,
+            "instructions": [
+              "地铁1号线"
+            ],
+            "paths": [
+              [
+                [
+                  120.2,
+                  30.25
+                ],
+                [
+                  120.1,
+                  30.25
+                ]
+              ]
+            ],
+            "source_ref": "amap:route:transit:B:O",
+            "fetched_at": "2026-11-24T05:59:09.777812Z",
+            "label": "T3",
+            "origin_name": "文化公园",
+            "destination_name": "杭州东站",
+            "start_at": "2026-11-25T12:15:00+08:00",
+            "end_at": "2026-11-25T12:45:00+08:00",
+            "duration_minutes": 20,
+            "buffer_minutes": 10
+          }
+        ],
+        "total_travel_minutes": 60,
+        "total_stay_minutes": 135,
+        "total_walking_meters": 300
+      }
+    ],
+    "warnings": [
+      "停留时长为规划建议；开放、票价、预约与天气须在出发前向官方确认。",
+      "交通为查询时的路线估计；站间预留缓冲，园内步行、排队和停车未完整计入。",
+      "费用未逐项核验，不能据此确认满足预算。"
+    ],
+    "web_sources": [
+      {
+        "label": "W1",
+        "poi_id": "A",
+        "provider": "tavily",
+        "title": "示例公园介绍",
+        "url": "https://parks.example.org/A",
+        "excerpt": "示例资料：园内设有步道，可散步游览。",
+        "fetched_at": "2026-11-24T05:59:09.748588Z"
+      },
+      {
+        "label": "W2",
+        "poi_id": "B",
+        "provider": "tavily",
+        "title": "示例公园介绍",
+        "url": "https://parks.example.org/B",
+        "excerpt": "示例资料：园内设有步道，可散步游览。",
+        "fetched_at": "2026-11-24T05:59:09.752588Z"
+      }
+    ],
+    "revision_count": 1,
+    "generated_at": "2026-11-24T05:59:09.801811Z"
+  }
+}

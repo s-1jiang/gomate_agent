@@ -1,6 +1,6 @@
 # Supervisor 地点搜索
 
-本阶段提供城市内关键词地点搜索，以及可按需加载的高德地图。用户可在对话中提问，也可在右侧输入城市和关键词。当前不实现 GPS 定位、周边半径、路线、天气、营业/价格核验或完整行程。
+本阶段提供城市内关键词地点搜索，以及可按需加载的高德地图。用户可在对话中提问，也可在右侧输入城市和关键词。完整游玩需求现在进入 [同城行程流程](ITINERARY.md)，包括路线查询、时间安排与回答内地图。GPS 定位、周边半径、天气和营业/价格核验尚未实现。
 
 ## 任务分发、审查和修改
 
@@ -55,6 +55,6 @@ SDK 仅使用 `/api/v1/maps/_AMapService/v4/map/styles` 固定代理，在后端
 
 `python scripts/smoke_map_workflow.py` 使用临时 SQLite 和假密钥，覆盖两个专家分派、审查退回、定向重搜、来源发布、Run 计数和幂等。测试不会访问真实 DeepSeek / 高德。
 
-当前完成模拟集成验证，尚未执行携带真实密钥的在线冒烟，也未完成真实浏览器地图加载验证。因此不据此声称真实账户鉴权、地点质量或 SDK 域名配置已经通过。
+2026-11-24 已使用临时数据库和公开杭州样例，跑通真实 DeepSeek、高德地点与公交行程查询，并单独确认步行/驾车接口可返回方案。模拟测试覆盖权限、取消、预算和返工边界。真实浏览器 SDK 加载与 Tavily 鉴权尚未验证；单个样例通过不等于所有地点、未来交通或营业情况均已核实。
 
 官方依据：[高德 POI 2.0](https://lbs.amap.com/api/webservice/guide/api-advanced/newpoisearch)、[JS 安全密钥代理](https://lbs.amap.com/api/javascript-api-v2/guide/abc/jscode)、[单点标注 URI](https://lbs.amap.com/api/uri-api/guide/mobile-web/point)、[DeepSeek JSON 输出](https://api-docs.deepseek.com/guides/json_mode/)。

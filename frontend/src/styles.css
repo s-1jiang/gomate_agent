@@ -110,6 +110,58 @@ svg {
   .knowledge-button > span { display: none; }
 }
 .map-panel { overflow-y: auto; }
+.itinerary-answer { width: 100%; min-width: 0; }
+.itinerary-answer h2 { font-size: 1.4rem; line-height: 1.5; margin: 6px 0 10px; color: #2e503e; }
+.itinerary-eyebrow { color: #64846f; font-size: 0.75rem; }
+.itinerary-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 14px 0 20px; color: #54715d; font-size: 0.8rem; }
+.itinerary-facts > span { display: inline-flex; align-items: center; gap: 6px; }
+.itinerary-assumptions { padding: 12px 16px; border-radius: 10px; background: #f7f8f1; font-size: 0.8125rem; margin: 16px 0; }
+.itinerary-assumptions ul, .itinerary-notes ul { padding-left: 19px; margin: 7px 0 0; }
+.itinerary-day { margin-top: 26px; }
+.itinerary-day h3, .web-evidence h3 { font-size: 1rem; margin-bottom: 5px; color: #315540; }
+.itinerary-day h3 span { margin-left: 12px; font-weight: 400; font-size: 0.8rem; color: #6a7d70; }
+.message .day-overview, .message .day-total { font-size: 0.8rem; color: #637a6a; margin-bottom: 18px; }
+.itinerary-stop { border: 1px solid #dfe9df; border-radius: 12px; padding: 17px 19px; margin: 12px 0; background: #fff; }
+.timeline-time { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; font-size: 1rem; font-weight: 650; color: #335c43; }
+.timeline-time span { font-weight: 400; font-size: 0.8rem; color: #6c8173; }
+.itinerary-stop h4 { font-size: 1.1rem; margin: 12px 0 7px; }
+.message .stop-reason { font-size: 0.85rem; color: #657b6c; line-height: 1.8; margin-bottom: 12px; }
+.stop-label { font-size: 0.8125rem; font-weight: 600; }
+.itinerary-stop ul { padding-left: 19px; margin: 7px 0 10px; }
+.itinerary-stop li { font-size: 0.875rem; line-height: 1.9; margin-bottom: 5px; overflow-wrap: anywhere; }
+.suggestion-label { display: inline-block; font-size: 0.6875rem; color: #7b8069; margin-left: 6px; border: 1px solid #e8e8db; border-radius: 4px; padding: 0 4px; line-height: 1.6; white-space: nowrap; }
+.stop-practical { border-top: 1px solid #edf0ea; padding-top: 9px; }
+.message .stop-practical p { font-size: 0.8rem; line-height: 1.8; }
+.stop-location { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 6px; font-size: 0.75rem; color: #708476; }
+.stop-location a { margin-left: auto; }
+.map-provenance { font-size: 0.6875rem; color: #829184; overflow-wrap: anywhere; }
+.evidence-link { font-size: 0.75rem; margin: 0 3px; }
+.itinerary-answer a { color: #426d55; text-decoration: underline; text-underline-offset: 3px; }
+.itinerary-travel { display: flex; gap: 10px; margin: 14px 8px; color: #6c7d71; font-size: 0.8rem; }
+.itinerary-travel > svg { flex-shrink: 0; margin-top: 3px; }
+.itinerary-travel strong { font-size: 0.8125rem; font-weight: 550; }
+.message .itinerary-travel p { font-size: 0.8125rem; line-height: 1.7; margin: 3px 0; }
+.itinerary-travel span, .itinerary-travel small { font-size: 0.75rem; }
+.itinerary-travel details { margin-top: 6px; }
+.itinerary-travel summary, .web-evidence summary { cursor: pointer; }
+.itinerary-travel ol { padding-left: 18px; margin: 7px 0; }
+.journey-map { margin: 20px 0; border: 1px solid #dce6dc; border-radius: 12px; padding: 13px; background: #fbfcfa; }
+.journey-map figcaption { display: flex; align-items: center; gap: 7px; color: #56725e; font-size: 0.8rem; margin-bottom: 10px; }
+.journey-map figcaption span { font-size: 0.6875rem; margin-left: auto; color: #8b9a8d; }
+.journey-map svg { width: 100%; height: auto; display: block; }
+.journey-map figcaption svg { width: 16px; }
+.journey-map .place-map { height: 290px; }
+.journey-map .place-map-wrap { margin-top: 0; }
+.journey-map-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; }
+.journey-map-footer small { font-size: 0.6875rem; color: #7c8c7d; }
+.journey-map-footer .button { padding: 7px 10px; font-size: 0.75rem; }
+.itinerary-notes { background: #f9f8f2; border: 1px solid #eceadc; border-radius: 10px; padding: 15px 17px; margin-top: 22px; font-size: 0.8125rem; color: #77785f; }
+.itinerary-notes li { margin: 5px 0; line-height: 1.8; }
+.web-evidence { margin-top: 22px; }
+.web-evidence details { border-bottom: 1px solid #e6ebe3; padding: 10px 0; font-size: 0.8rem; }
+.web-evidence blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid #d9e3d6; color: #6f7e70; line-height: 1.8; overflow-wrap: anywhere; }
+.web-evidence small { color: #899589; font-size: 0.6875rem; }
+@media (max-width: 760px) { .itinerary-stop { padding: 14px; } .itinerary-answer h2 { font-size: 1.2rem; } .journey-map { padding: 10px; } .journey-map .place-map { height: 230px; } }
 .map-search-form { display: grid; gap: 10px; margin: 20px 0 12px; }
 .map-search-form label { display: grid; gap: 5px; font-size: 0.8125rem; }
 .map-search-form input { width: 100%; min-width: 0; padding: 10px; background: white; border: 1px solid #dce4d7; border-radius: 7px; font: inherit; }

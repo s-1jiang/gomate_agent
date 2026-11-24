@@ -78,4 +78,4 @@ python scripts/smoke_chat.py
 
 代码变更后执行 `docker compose up -d --build --wait`。仅修改 `.env` 时执行 `docker compose up -d --no-deps --force-recreate --wait backend`；普通 restart 不更新容器环境变量。
 
-Supervisor 地点搜索已接通，真实高德权限与结果质量需实际验证。完整行程、路线和天气尚未接入。
+Supervisor 同城行程与路线查询已接通，真实供应商权限与结果质量需实际验证。可选 `TAVILY_API_KEY` 与行程限制见 [同城行程](ITINERARY.md)，天气尚未接入。

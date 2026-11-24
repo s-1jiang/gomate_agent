@@ -18,6 +18,7 @@ def map_config(request: Request, response: Response, user: CurrentUser):
         "js_key": settings.amap_js_api_key if enabled else "",
         "security_proxy": "/api/v1/maps/_AMapService",
         "default_city": settings.default_city,
+        "web_search_enabled": bool(settings.tavily_api_key.get_secret_value()),
     }
 
 

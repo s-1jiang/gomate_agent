@@ -39,6 +39,7 @@ class DeepSeekClient:
                     "chat/completions",
                     json={
                         "model": self.settings.deepseek_model,
+                        "thinking": {"type": self.settings.deepseek_thinking},
                         "messages": [message.model_dump() for message in messages],
                         "stream": False,
                         "max_tokens": self.settings.chat_max_output_tokens,

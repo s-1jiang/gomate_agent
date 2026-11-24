@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.planning import Coordinates, Place, RouteLeg
+from app.schemas.itinerary import RouteObservation
+from app.schemas.planning import Place
 from app.tools.budget import RunBudget
 
 
@@ -28,9 +30,9 @@ class MapProvider(Protocol):
     async def get_route(
         self,
         *,
-        origin: Coordinates,
-        destination: Coordinates,
+        origin: Place,
+        destination: Place,
         mode: str,
-        city: str,
+        departure_at: datetime,
         budget: RunBudget,
-    ) -> RouteLeg: ...
+    ) -> RouteObservation: ...

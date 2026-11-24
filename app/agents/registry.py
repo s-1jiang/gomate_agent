@@ -12,13 +12,16 @@ class AgentSpec:
 AGENTS = MappingProxyType(
     {
         "supervisor": AgentSpec("supervisor", "任务分发、结果审查与定向返工", frozenset()),
-        "places": AgentSpec("places", "通用地点搜索与来源核实", frozenset({"search_local_places"})),
+        "places": AgentSpec(
+            "places", "通用地点搜索与来源核实", frozenset({"search_local_places", "search_web"})
+        ),
         "activity": AgentSpec(
             "activity",
             "游玩候选及证据研究",
             frozenset(
                 {
                     "search_local_places",
+                    "search_web",
                     "get_place_details",
                     "get_weather",
                     "search_private_knowledge",
@@ -31,6 +34,7 @@ AGENTS = MappingProxyType(
             frozenset(
                 {
                     "search_local_places",
+                    "search_web",
                     "get_place_details",
                     "search_private_knowledge",
                 }

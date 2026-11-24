@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type { MapConfig, MapPlace } from "../api";
 import { loadMapSdk, type MapInstance, type MarkerInstance } from "../mapSdk";
 
-export function PlaceMap({ config, places, selectedId, onSelect, visible }: {
+export function PlaceMap({ config, places, selectedId, onSelect, visible, paths = [] }: {
   config: MapConfig; places: MapPlace[]; selectedId: string | null;
-  onSelect: (id: string) => void; visible: boolean;
+  onSelect: (id: string) => void; visible: boolean; paths?: [number, number][][];
 }) {
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<MapInstance | null>(null);
   const markers = useRef<MarkerInstance[]>([]);
+  const lines = useRef<object[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const choose = useRef(onSelect);
@@ -40,6 +41,15 @@ export function PlaceMap({ config, places, selectedId, onSelect, visible }: {
     instance.add(markers.current);
     if (markers.current.length) instance.setFitView(markers.current, false, [30, 30, 30, 30], 15);
   }, [places, ready]);
+  useEffect(() => {
+    const instance = map.current, Polyline = window.AMap?.Polyline;
+    if (!ready || !instance || !Polyline) return;
+    instance.remove(lines.current);
+    lines.current = paths.filter((path) => path.length > 1).map((path) => new Polyline({
+      path, strokeColor: "#477b64", strokeWeight: 5, strokeOpacity: 0.8,
+    }));
+    instance.add(lines.current);
+  }, [paths, ready]);
   useEffect(() => {
     const place = places.find((item) => item.poi_id === selectedId);
     if (ready && place) map.current?.setZoomAndCenter(15, [place.location.longitude, place.location.latitude]);

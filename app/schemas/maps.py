@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.itinerary import Itinerary, TripRequest
 from app.schemas.planning import Place
 
 Specialist = Literal["places", "activity", "dining"]
@@ -19,17 +20,22 @@ class Assignment(StrictModel):
 
 
 class SupervisorDecision(StrictModel):
-    kind: Literal["answer", "clarify", "search"]
+    kind: Literal["answer", "clarify", "search", "plan"]
     answer: str = Field(default="", max_length=16000)
     city: str = Field(default="", max_length=80)
     tasks: list[Assignment] = Field(default_factory=list, max_length=2)
+    trip: TripRequest | None = None
 
     @model_validator(mode="after")
     def check_decision(self):
-        if self.kind == "search" and not self.tasks:
+        if self.kind in {"search", "plan"} and not self.tasks:
             raise ValueError("Search requires a delegated task")
-        if self.kind != "search" and (not self.answer or self.tasks):
+        if self.kind not in {"search", "plan"} and (not self.answer or self.tasks):
             raise ValueError("Answers require text and cannot contain tasks")
+        if self.kind == "plan" and self.trip is None:
+            raise ValueError("Itinerary requires a time window")
+        if self.kind != "plan" and self.trip is not None:
+            raise ValueError("Only planning accepts a trip")
         return self
 
 
@@ -66,9 +72,20 @@ class SupervisorReview(StrictModel):
 
 class WorkflowEvent(BaseModel):
     stage: Literal[
-        "route", "dispatch", "search", "review", "revise", "complete", "clarify", "limit"
+        "route",
+        "dispatch",
+        "search",
+        "review",
+        "revise",
+        "complete",
+        "clarify",
+        "limit",
+        "research",
+        "plan",
+        "travel",
+        "validate",
     ]
-    agent: Literal["supervisor", "places", "activity", "dining"]
+    agent: Literal["supervisor", "places", "activity", "dining", "itinerary"]
     task_id: str | None = None
     task_version: int | None = None
     summary: str = Field(max_length=600)
@@ -87,3 +104,4 @@ class MapSearchResult(BaseModel):
     review_rounds: int = Field(ge=0)
     events: list[WorkflowEvent] = Field(default_factory=list)
     searched_at: datetime
+    itinerary: Itinerary | None = None

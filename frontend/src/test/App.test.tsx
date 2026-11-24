@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import type { Conversation, MapSearchResult, Message, RetrievalSource, Run } from "../api";
+import itineraryFixture from "./fixtures/itinerary.json";
 
 const USER = {
   id: "user-a",
@@ -122,6 +123,18 @@ beforeEach(() => {
 });
 
 describe("GoMate workspace", () => {
+  it("shows a persisted complete itinerary inline instead of a duplicate plain text answer", async () => {
+    sessionStorage.setItem("gomate.session", "test-token");
+    backend({ initial: [SESSION], replyText: "RAW_ITINERARY_FALLBACK", replyMap: itineraryFixture as unknown as MapSearchResult });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "打开会话：周末的想法" }));
+    const composer = screen.getByRole("textbox", { name: /出行需求/ });
+    await user.type(composer, "安排杭州半日游");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByRole("region", { name: "完整游玩行程" })).toBeVisible();
+    expect(screen.queryByText("RAW_ITINERARY_FALLBACK")).not.toBeInTheDocument();
+  });
   it("clears expired login state and asks for authentication again", async () => {
     sessionStorage.setItem("gomate.session", "expired-token");
     const { fetchMock } = backend();

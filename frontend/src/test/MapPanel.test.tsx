@@ -62,15 +62,17 @@ it("renders authoritative coordinates and keeps marker/card selection synchroniz
   const clicks: (() => void)[] = [];
   const map = { add, remove, setFitView: fit, setZoomAndCenter: center, destroy };
   const marker = vi.fn(function (_options: Record<string, unknown>) { return { on: (_name: string, action: () => void) => clicks.push(action) }; });
-  const sdk = { Map: vi.fn(function () { return map; }), Marker: marker };
+  const polyline = vi.fn(function (_options: Record<string, unknown>) { return {}; });
+  const sdk = { Map: vi.fn(function () { return map; }), Marker: marker, Polyline: polyline };
   vi.stubGlobal("AMap", sdk);
   vi.mocked(loadMapSdk).mockResolvedValue(sdk);
   const select = vi.fn();
   const view = render(<PlaceMap config={{ ...config, display_enabled: true }} places={result.places}
-    selectedId="B001" onSelect={select} visible />);
+    selectedId="B001" onSelect={select} visible paths={[[[120.15, 30.25], [120.16, 30.26]]]} />);
   await waitFor(() => expect(marker).toHaveBeenCalled());
   expect(marker.mock.calls[0][0]).toMatchObject({ position: [120.15, 30.25], title: "河边咖啡" });
   expect(center).toHaveBeenCalledWith(15, [120.15, 30.25]);
+  expect(polyline).toHaveBeenCalledWith(expect.objectContaining({ path: [[120.15, 30.25], [120.16, 30.26]] }));
   clicks[0]();
   expect(select).toHaveBeenCalledWith("B001");
   view.unmount();

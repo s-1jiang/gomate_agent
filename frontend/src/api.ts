@@ -19,8 +19,8 @@ export interface Message {
   map_result?: MapSearchResult | null;
 }
 export interface WorkflowEvent {
-  stage: "route" | "dispatch" | "search" | "review" | "revise" | "complete" | "clarify" | "limit";
-  agent: "supervisor" | "places" | "activity" | "dining";
+  stage: "route" | "dispatch" | "search" | "review" | "revise" | "complete" | "clarify" | "limit" | "research" | "plan" | "travel" | "validate";
+  agent: "supervisor" | "places" | "activity" | "dining" | "itinerary";
   task_id: string | null;
   task_version: number | null;
   summary: string;
@@ -48,6 +48,41 @@ export interface MapSearchResult {
   events: WorkflowEvent[];
   review_rounds: number;
   searched_at: string;
+  itinerary?: Itinerary | null;
+}
+export interface ActivityDetail { text: string; evidence_ids: string[]; }
+export interface ScheduledStop {
+  poi_id: string; name: string; label: string; kind: "visit" | "meal" | "break";
+  arrival_at: string; departure_at: string; duration_minutes: number;
+  reason: string; activities: ActivityDetail[]; practical_info: ActivityDetail[];
+}
+export interface ScheduledLeg {
+  label: string; origin_poi_id: string; destination_poi_id: string;
+  origin_name: string; destination_name: string;
+  start_at: string; end_at: string; duration_minutes: number; buffer_minutes: number;
+  mode: "walking" | "driving" | "transit"; distance_meters: number; walking_meters: number;
+  duration_seconds: number; instructions: string[]; paths: [number, number][][];
+  source_ref: string; fetched_at: string;
+}
+export interface ScheduledDay {
+  start_at: string; deadline: string; finish_at: string; spare_minutes: number;
+  stops: ScheduledStop[]; legs: ScheduledLeg[];
+  total_travel_minutes: number; total_stay_minutes: number; total_walking_meters: number;
+}
+export interface WebEvidence {
+  label: string; poi_id: string; provider: "tavily"; title: string;
+  url: string; excerpt: string; fetched_at: string;
+}
+export interface Itinerary {
+  title: string; summary: string; timezone: "Asia/Shanghai";
+  request: { days: { start_at: string; end_at: string }[]; origin_name: string;
+    return_to_origin: boolean; mode: "walking" | "driving" | "transit";
+    party_size: number; budget_fen: number | null; budget_scope: "per_person" | "total";
+    assumptions: string[]; requirements: string[]; buffer_minutes: number; max_walking_meters: number | null;
+  };
+  origin: Omit<MapPlace, "label" | "agent" | "task_id"> | null;
+  days: ScheduledDay[]; warnings: string[]; web_sources: WebEvidence[];
+  revision_count: number; generated_at: string;
 }
 export interface MapConfig {
   provider: "amap";
@@ -56,6 +91,7 @@ export interface MapConfig {
   js_key: string;
   security_proxy: string;
   default_city: string;
+  web_search_enabled?: boolean;
 }
 export interface RetrievalSource {
   label: string;

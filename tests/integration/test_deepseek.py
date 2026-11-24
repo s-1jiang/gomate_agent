@@ -21,6 +21,7 @@ def test_deepseek_request_format_budget_and_reasoning_not_returned(settings):
             assert str(request.url) == "https://api.deepseek.com/chat/completions"
             assert request.headers["Authorization"] == "Bearer fake-test-key"
             assert json.loads(request.content)["max_tokens"] == settings.chat_max_output_tokens
+            assert json.loads(request.content)["thinking"] == {"type": "disabled"}
             return httpx.Response(
                 200,
                 json={

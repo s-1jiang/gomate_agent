@@ -41,7 +41,7 @@ export function MapPanel({ api, city, result, mobile, signedIn, busy, onClose, o
       <label>地点关键词<input value={keyword} maxLength={80} placeholder="例如：咖啡馆、公园" onChange={(event) => setKeyword(event.target.value)} required disabled={busy} /></label>
       <button className="button primary" disabled={busy || !keyword.trim() || !searchCity.trim()} type="submit"><Search size={16} />{signedIn ? "搜索地点" : "登录后搜索地点"}</button>
     </form>
-    <p className="map-helper">Supervisor 分派搜索任务并审查结果；不合适时会要求下属 Agent 修改。</p>
+    <p className="map-helper">这里查询地点。需要完整行程时，在对话中告诉我出发点、时间和游玩偏好。</p>
     {notice && <p role="alert" className="map-error">{notice}</p>}
     {config && !config.search_enabled && <p className="map-helper">地点查询需要在后端配置高德 Web 服务 Key。</p>}
     {places.length > 0 && <>

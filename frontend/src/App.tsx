@@ -42,6 +42,7 @@ import { Dialog } from "./components/Dialog";
 import { KnowledgeDialog } from "./components/KnowledgeDialog";
 import { MessageSources } from "./components/MessageSources";
 import { MapPanel } from "./components/MapPanel";
+import { ItineraryAnswer } from "./components/ItineraryAnswer";
 import { WorkflowTrace } from "./components/WorkflowTrace";
 import { Welcome } from "./components/Welcome";
 
@@ -707,7 +708,7 @@ export default function App() {
                         <span className="message-author">
                           {message.role === "user" ? "你" : "逛搭"}
                         </span>
-                        <p>{message.content}</p>
+                        {message.map_result?.itinerary ? <ItineraryAnswer api={api} result={message.map_result} /> : <p>{message.content}</p>}
                         <MessageSources message={message} />
                         {message.map_result && <WorkflowTrace events={message.map_result.events} />}
                       </div>
